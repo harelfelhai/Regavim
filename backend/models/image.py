@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.base import Base
@@ -17,6 +17,9 @@ class Image(Base):
     The original file is stored on disk untouched — no re-encoding, no stripping.
     exif_data holds the full EXIF blob extracted at upload time and is immutable
     after creation; it may be used as evidence in legal proceedings.
+
+    has_exif is True only when the EXIF block contains GPS coordinates or a
+    DateTimeOriginal timestamp. Device make/model alone do not qualify.
     """
 
     __tablename__ = "images"
@@ -30,6 +33,8 @@ class Image(Base):
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     exif_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # True only when GPS or DateTimeOriginal metadata was found — legal significance flag.
+    has_exif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

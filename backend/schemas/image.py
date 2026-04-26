@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ImageRead(BaseModel):
-    """Image metadata returned by GET /api/v1/images/{id}."""
+    """Image metadata returned by the API after a successful upload."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,4 +23,6 @@ class ImageRead(BaseModel):
     file_path: str
     original_filename: str
     exif_data: Optional[dict[str, Any]] = None
+    # True when GPS coordinates or DateTimeOriginal were found in EXIF.
+    has_exif: bool
     uploaded_at: datetime

@@ -289,6 +289,79 @@ GET    /api/v1/auth/me               Current user info
 
 ---
 
+## 11. Stage 4 — Plan
+
+### Goal
+Implement a robust image upload pipeline: multipart upload → size/format validation → EXIF extraction → storage → DB record creation. All image processing must be non-blocking and the storage layer must be swappable without touching the endpoint.
+
+### New / Changed Files
+
+| File | Change | Reason |
+|---|---|---|
+| `backend/core/config.py` | Add `UPLOAD_DIR: str = "uploads"` | Configurable storage root |
+| `backend/models/image.py` | Add `has_exif: Mapped[bool]` | Flag for legal metadata presence |
+| `backend/schemas/image.py` | Add `has_exif: bool` to `ImageRead` | Expose flag to clients |
+| `backend/services/image_service.py` | Enhance `extract_exif()` to include GPS sub-IFD; add `exif_has_legal_metadata()` | Structured EXIF access; `has_exif` determination |
+| `backend/services/storage.py` | **New** — `StorageProvider` ABC + `LocalStorageProvider` | Loose coupling for S3 swap |
+| `backend/api/v1/images.py` | Implement `POST /api/v1/images/upload`; add `get_storage()` dependency | Core feature |
+| `backend/requirements.txt` | Add `piexif>=1.1.3` | Create EXIF-bearing test images |
+| `tests/test_images.py` | **New** — full upload test suite | Compliance protocol |
+| `.gitignore` | Add `uploads/` | Don't commit uploaded files |
+
+### Storage Abstraction Design
+
+```
+StorageProvider (ABC)
+├── save(filename: str, data: bytes) -> str   # returns the stored path / URL
+└── delete(path: str) -> None
+
+LocalStorageProvider(StorageProvider)
+└── saves to UPLOAD_DIR/{uuid}.{ext}
+
+# Future — no API change required:
+S3StorageProvider(StorageProvider)
+└── uploads to s3://bucket/{uuid}.{ext}, returns pre-signed URL
+```
+
+The endpoint depends on `StorageProvider` via FastAPI's `Depends(get_storage)`. Tests override `get_storage` with a temp-dir-backed provider — no mocking required.
+
+### `has_exif` Logic
+Set to `True` only when at least one of these is present in the EXIF:
+- **GPS sub-IFD** (tag 34853) contains at least one entry, OR
+- **DateTimeOriginal** (tag 36867) is present in the Exif sub-IFD (tag 34665)
+
+Device Make / Model alone do **not** set `has_exif = True`.
+
+### Upload Endpoint Contract
+
+```
+POST /api/v1/images/upload
+Content-Type: multipart/form-data
+
+Fields:
+  report_id  (str, required) — existing report to link to
+  file       (UploadFile, required) — image file
+
+Responses:
+  201  ImageRead   — success
+  404              — report_id not found
+  413              — file exceeds 10 MB limit
+  422              — unsupported or corrupt format
+```
+
+### Stage 4 Anomaly Focus (per protocol)
+| Anomaly | Expected Behaviour |
+|---|---|
+| JPEG with full GPS + timestamp EXIF | `has_exif = True`; upload succeeds |
+| JPEG/PNG with no EXIF | `has_exif = False`; upload still succeeds |
+| JPEG with Make/Model only (no GPS or timestamp) | `has_exif = False` |
+| Corrupt bytes (random data) | 422 Unprocessable Entity |
+| File > 10 MB | 413 Payload Too Large |
+| Path traversal in filename (`../../etc/passwd.jpg`) | 201; stored path contains no `..` |
+| 5 concurrent uploads to same report | All 201; all unique IDs |
+
+---
+
 ## 8. Project Status
 
 | # | Stage | Status |
@@ -296,7 +369,7 @@ GET    /api/v1/auth/me               Current user info
 | 1 | Project scoping & memory file | **Done** |
 | 2 | Backend scaffolding (FastAPI skeleton, DB setup) | **Done** |
 | 3 | ORM models + Pydantic schemas | **Done** (completed as part of Stage 2) |
-| 4 | Image upload endpoint + EXIF handling | Pending |
+| 4 | Image upload endpoint + EXIF handling | **Done** |
 | 5 | Claude AI integration service | Pending |
 | 6 | Full report CRUD API | Pending |
 | 7 | Auth (JWT) | Pending |
@@ -305,6 +378,54 @@ GET    /api/v1/auth/me               Current user info
 | 10 | Map location picker (UI) | Pending |
 | 11 | Manager dashboard (UI) | Pending |
 | 12 | End-to-end testing & deployment config | Pending |
+
+---
+
+## 12. Stage 4 — Completion Summary
+
+### What Was Built
+
+| File | Change |
+|---|---|
+| `backend/core/config.py` | Added `UPLOAD_DIR: str = "uploads"` |
+| `backend/models/image.py` | Added `has_exif: Mapped[bool]` |
+| `backend/schemas/image.py` | Added `has_exif: bool` to `ImageRead` |
+| `backend/services/image_service.py` | Enhanced `extract_exif()` with GPS sub-IFD; added `exif_has_legal_metadata()` |
+| `backend/services/storage.py` | **New** — `StorageProvider` ABC + `LocalStorageProvider` |
+| `backend/api/v1/images.py` | Implemented `POST /api/v1/images/upload` + `GET /api/v1/images/{id}` |
+| `tests/conftest.py` | Switched from `StaticPool` (in-memory) to file-based SQLite + `QueuePool` for thread-safety |
+| `tests/test_images.py` | **New** — 35 tests across 6 classes |
+| `backend/requirements.txt` | Added `piexif>=1.1.3` |
+| `.gitignore` | Added `uploads/` |
+
+### Test Results — 106 / 106 PASSED (35 new)
+
+| Test Class | Count | Result |
+|---|---|---|
+| `TestUploadHappyPath` | 8 | PASS |
+| `TestNoExifCases` | 5 | PASS |
+| `TestAnomalies` | 9 | PASS |
+| `TestConcurrency` | 2 | PASS |
+| `TestExifHasLegalMetadata` | 7 | PASS |
+| `TestExtractExifEnriched` | 4 | PASS |
+| All Stage 2 tests | 71 | PASS (no regressions) |
+
+### Anomalies Discovered & Handled
+
+| Anomaly | Finding | Resolution |
+|---|---|---|
+| StaticPool + threading | `StaticPool` shares one connection across all threads, causing `InvalidRequestError` on concurrent `db.refresh()` | Switched test engine to file-based SQLite + `QueuePool`; each thread gets its own connection; SQLite serialises writes internally |
+| `has_exif` for Make/Model only | Images with device metadata but no GPS or timestamp were initially ambiguous | Documented and tested: Make/Model alone sets `has_exif = False`; only GPS sub-IFD entries or `DateTimeOriginal` qualify |
+| Path traversal filename | `../../etc/passwd.jpg` as filename must not escape the upload dir | `Path(filename).name` strips all directory components before storing; on-disk path uses UUID only |
+| Deprecated FastAPI status constants | `HTTP_413_REQUEST_ENTITY_TOO_LARGE` and `HTTP_422_UNPROCESSABLE_ENTITY` produce `DeprecationWarning` in FastAPI 0.111+ | Replaced with bare integer literals `413` and `422` |
+| Empty file upload | 0-byte file passes size check (correctly) but fails format validation | Returns 422 — correct behaviour; format check acts as the second gate |
+| GPS sub-IFD Pillow access | `img.getexif().items()` does not include GPS entries in main dict; requires `exif.get_ifd(34853)` | Explicitly call `get_ifd()` for GPS and Exif sub-IFDs; stored under `gps_ifd` key in the JSON blob |
+
+### Technical Debt / Deferred Items
+- `POST /api/v1/images/analyze` is still a stub — Claude AI call implemented in Stage 5.
+- File deletion (`StorageProvider.delete()`) is implemented but never called — wire up to report delete in Stage 6.
+- `UPLOAD_DIR` is relative; should be resolved to an absolute path at startup.
+- No auth guard on the upload endpoint — add in Stage 7.
 
 ---
 

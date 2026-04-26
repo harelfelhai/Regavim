@@ -1,7 +1,8 @@
 """
-Image handling helpers — EXIF extraction, size validation, format validation.
+Image handling helpers — EXIF extraction, metadata flagging, size and format validation.
 
-These are pure functions with no side effects so they are fully unit-testable.
+All functions are pure (no side effects, no I/O beyond in-memory Pillow ops) so
+they are fully unit-testable without a real file system or database.
 The actual file I/O and DB persistence happen in the images router (Stage 4).
 """
 
@@ -10,33 +11,84 @@ from typing import Any
 
 from PIL import Image as PILImage
 
-# Maximum accepted upload size. Enforced before writing to disk.
-MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+# ── Limits & accepted formats ─────────────────────────────────────────────────
 
-# Image formats accepted by the system.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB — enforced before any disk write
 SUPPORTED_FORMATS = {"JPEG", "PNG", "TIFF"}
 
+# ── EXIF tag constants ────────────────────────────────────────────────────────
+# Using raw integer IDs so we have zero dependency on PIL.ExifTags ordering.
+
+_GPS_IFD_TAG = 34853       # Main IFD pointer to the GPS sub-IFD
+_EXIF_IFD_TAG = 34665      # Main IFD pointer to the Exif sub-IFD
+_DATETIME_ORIGINAL_TAG = 36867  # Exif IFD: capture timestamp (legally significant)
+_MAKE_TAG = 271            # Device manufacturer
+_MODEL_TAG = 272           # Device model
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def extract_exif(image_bytes: bytes) -> dict[str, Any] | None:
     """
-    Extract EXIF metadata from raw image bytes.
+    Extract raw EXIF metadata from image bytes into a JSON-serialisable dict.
 
-    Returns a flat dict mapping tag IDs (as strings) to their values, or None
-    if the image contains no EXIF block or if parsing fails for any reason.
-    Never raises — callers must treat a None return as 'no metadata available'
-    and proceed accordingly (store the image without EXIF).
+    Tag IDs are converted to strings (for JSON key compatibility).
+    The GPS sub-IFD is extracted separately under the key 'gps_ifd' so
+    that callers can access location data without tag-ID lookups.
 
-    EXIF data is legally significant; this function must never modify or
-    truncate the values it reads.
+    Returns None if:
+      - the image has no EXIF block
+      - the image format does not support EXIF (e.g. PNG)
+      - parsing fails for any reason (corrupt data, truncated file)
+
+    Never raises — callers must treat None as 'no metadata available'.
     """
     try:
         img = PILImage.open(io.BytesIO(image_bytes))
-        raw = img._getexif()  # type: ignore[attr-defined]
-        if raw is None:
+        exif = img.getexif()
+        if not exif:
             return None
-        return {str(tag): str(value) for tag, value in raw.items()}
+
+        result: dict[str, Any] = {str(tag): str(val) for tag, val in exif.items()}
+
+        # GPS lives in a sub-IFD; pull it out for structured access.
+        gps_ifd = exif.get_ifd(_GPS_IFD_TAG)
+        if gps_ifd:
+            result["gps_ifd"] = {str(k): str(v) for k, v in gps_ifd.items()}
+
+        return result if result else None
     except Exception:
         return None
+
+
+def exif_has_legal_metadata(image_bytes: bytes) -> bool:
+    """
+    Return True when the image contains at least one legally significant EXIF field.
+
+    Qualifying fields:
+      - GPS coordinates (any entry in the GPS sub-IFD)
+      - DateTimeOriginal (the moment the shutter fired, not the file date)
+
+    Device make/model alone do NOT qualify — they establish the device but
+    not the time or place of capture, which are the fields that matter in court.
+    """
+    try:
+        img = PILImage.open(io.BytesIO(image_bytes))
+        exif = img.getexif()
+        if not exif:
+            return False
+
+        # GPS: presence of any entry in the GPS sub-IFD is sufficient.
+        gps_ifd = exif.get_ifd(_GPS_IFD_TAG)
+        if gps_ifd:
+            return True
+
+        # DateTimeOriginal lives in the Exif sub-IFD; check there first,
+        # then fall back to the main IFD in case a camera wrote it flat.
+        exif_ifd = exif.get_ifd(_EXIF_IFD_TAG)
+        return _DATETIME_ORIGINAL_TAG in exif_ifd or _DATETIME_ORIGINAL_TAG in exif
+    except Exception:
+        return False
 
 
 def validate_image_size(image_bytes: bytes) -> None:

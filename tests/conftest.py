@@ -1,31 +1,41 @@
 """
 Shared pytest fixtures.
 
-All tests use an in-memory SQLite database via StaticPool so that every
-session shares the same connection — required for in-memory SQLite where
-each new connection would otherwise see a fresh, empty database.
+Database strategy:
+  A temporary file-based SQLite database is created once per test session.
+  File-based SQLite (vs in-memory) allows multiple threads to obtain their own
+  connections from the pool, which is required for the concurrency tests.
+  StaticPool (single shared connection) was intentionally avoided because it
+  serialises all writes to one connection and is not thread-safe under load.
 
-The get_db dependency is overridden at module load time so the override
-is active before any test request is made.
+  The autouse clear_tables fixture truncates all rows between tests so each
+  test starts with a clean slate without the overhead of recreating the schema.
 """
+
+import os
+import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import backend.models  # noqa: F401 — registers all ORM models with Base.metadata
 from backend.db.base import Base
 from backend.db.session import get_db
 from backend.main import app
 
-_TEST_DB_URL = "sqlite:///:memory:"
+# ── Test database — file-based SQLite, one connection per session ─────────────
+_db_fd, _db_path = tempfile.mkstemp(suffix=".db")
+os.close(_db_fd)
+
+TEST_DB_URL = f"sqlite:///{_db_path}"
 
 test_engine = create_engine(
-    _TEST_DB_URL,
+    TEST_DB_URL,
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
+    # Default QueuePool: each session gets its own connection.
+    # This is required for concurrent tests to avoid connection-level corruption.
 )
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -42,6 +52,14 @@ def _override_get_db():
 
 
 app.dependency_overrides[get_db] = _override_get_db
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Clean up the temp DB file after the full test run."""
+    try:
+        os.unlink(_db_path)
+    except OSError:
+        pass
 
 
 @pytest.fixture(scope="session")

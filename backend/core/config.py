@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # Switch by setting DATABASE_URL in the environment or .env file.
     DATABASE_URL: str = "sqlite:///./regavim.db"
 
+    # Local upload directory. Relative paths are resolved from the working directory.
+    # For production, swap LocalStorageProvider for S3StorageProvider instead.
+    UPLOAD_DIR: str = "uploads"
+
     # Anthropic Claude API key for image analysis.
     ANTHROPIC_API_KEY: str = ""
 
