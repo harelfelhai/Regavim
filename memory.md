@@ -114,10 +114,12 @@ Regavim/
 |---|---|---|
 | `id` | UUID | Primary key |
 | `created_at` | DateTime | UTC, auto-set |
+| `updated_at` | DateTime | UTC, auto-updated on every change — tracks approval progress |
 | `status` | Enum | `pending`, `approved`, `rejected` |
 | `ai_category` | String | Claude's raw suggestion |
 | `final_category` | String | Human-approved category (may differ) |
 | `description` | Text | Optional coordinator notes |
+| `land_context` | String | Legal land status (State land, private, etc.) — populated by GIS layer intersection |
 | `user_id` | FK → User | Who submitted |
 | `user_lat` | Float | Coordinator's GPS latitude |
 | `user_lng` | Float | Coordinator's GPS longitude |
@@ -189,8 +191,8 @@ GET    /api/v1/auth/me               Current user info
 | # | Stage | Status |
 |---|---|---|
 | 1 | Project scoping & memory file | **Done** |
-| 2 | Backend scaffolding (FastAPI skeleton, DB setup) | Pending |
-| 3 | ORM models + Pydantic schemas | Pending |
+| 2 | Backend scaffolding (FastAPI skeleton, DB setup) | **Done** |
+| 3 | ORM models + Pydantic schemas | **Done** (completed as part of Stage 2) |
 | 4 | Image upload endpoint + EXIF handling | Pending |
 | 5 | Claude AI integration service | Pending |
 | 6 | Full report CRUD API | Pending |
