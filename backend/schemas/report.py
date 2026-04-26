@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from backend.core.constants import ReportStatus, ViolationCategory
 
@@ -25,6 +25,20 @@ class ReportCreate(BaseModel):
     target_lat: Optional[float] = None
     target_lng: Optional[float] = None
     land_context: Optional[str] = None
+
+    @field_validator("user_lat", "target_lat")
+    @classmethod
+    def validate_latitude(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (-90.0 <= v <= 90.0):
+            raise ValueError(f"Latitude {v} is out of range. Must be between -90 and 90.")
+        return v
+
+    @field_validator("user_lng", "target_lng")
+    @classmethod
+    def validate_longitude(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (-180.0 <= v <= 180.0):
+            raise ValueError(f"Longitude {v} is out of range. Must be between -180 and 180.")
+        return v
 
 
 class ReportUpdate(BaseModel):

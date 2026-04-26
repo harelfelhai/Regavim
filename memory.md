@@ -157,7 +157,41 @@ Regavim/
 
 ---
 
-## 5. Key Design Constraints
+## 5. Mandatory Testing Protocol
+
+> Applies to every stage from Stage 2 onwards. No stage is considered complete without passing tests.
+
+### Pre-Commit Checklist
+1. **Happy path** — valid, typical inputs must produce correct outputs.
+2. **Edge cases** — missing GPS, empty strings, boundary values (lat ±90, lng ±180), None fields.
+3. **Security** — string inputs containing SQL injection and XSS payloads must be stored/returned safely (not executed).
+4. **Anomaly cases** (as specified per stage) — documented below.
+
+### Test Framework
+- **Tool**: `pytest` with `httpx` for the FastAPI `TestClient`.
+- **DB**: In-memory SQLite with `StaticPool` — fully isolated, no file artifacts.
+- **Location**: `tests/` at repo root, one file per concern.
+- **Command**: `pytest tests/ -v` from repo root.
+
+### Stage-Specific Anomaly Focus
+
+| Stage | Anomaly Focus |
+|---|---|
+| 2 (current) | Invalid/extreme GPS coords; missing EXIF metadata; large or corrupt image files |
+| 4 | Corrupt upload stream; duplicate filename; EXIF stripping prevention |
+| 5 | Claude API timeout; ambiguous image content; empty AI response |
+| 6 | Concurrent status updates; cascade delete of images |
+
+### Stage Summary Format
+Each completed stage must append a section to this file containing:
+- What was built (files created/changed).
+- Tests run and Pass/Fail result per test class.
+- Anomalies discovered and how they were handled.
+- Technical debt or deferred items.
+
+---
+
+## 6. Key Design Constraints
 
 - **EXIF preservation**: Images must never be re-encoded or stripped of metadata. Store originals as-is; serve them directly.
 - **Dual-location model**: Always store both `user_lat/lng` (device GPS) and `target_lat/lng` (map pin) — they are semantically different and both matter legally.
@@ -167,7 +201,7 @@ Regavim/
 
 ---
 
-## 6. API Endpoints (Planned)
+## 7. API Endpoints (Planned)
 
 ```
 POST   /api/v1/reports/              Create a new report (with image upload)
@@ -186,7 +220,76 @@ GET    /api/v1/auth/me               Current user info
 
 ---
 
-## 7. Project Status
+## 10. Stage 2 — Completion Summary
+
+### What Was Built
+| File | Purpose |
+|---|---|
+| `backend/core/config.py` | Pydantic `Settings` reading `.env`; `DATABASE_URL`, `ANTHROPIC_API_KEY`, `SECRET_KEY` |
+| `backend/core/constants.py` | `ViolationCategory`, `ReportStatus`, `UserRole` enums |
+| `backend/db/base.py` | SQLAlchemy `DeclarativeBase` |
+| `backend/db/session.py` | Engine, `SessionLocal`, `get_db()` FastAPI dependency |
+| `backend/models/user.py` | `User` ORM model |
+| `backend/models/report.py` | `Report` ORM model — all 13 fields incl. `updated_at`, `land_context` |
+| `backend/models/image.py` | `Image` ORM model — EXIF stored as JSON blob |
+| `backend/schemas/report.py` | `ReportCreate` / `ReportUpdate` / `ReportRead` — with GPS validators |
+| `backend/schemas/image.py` | `ImageRead` |
+| `backend/api/v1/reports.py` | `POST /`, `GET /`, `GET /{id}` implemented; PATCH/DELETE stubbed (Stage 6) |
+| `backend/api/v1/images.py` | Route stubs (Stage 4/5) |
+| `backend/api/v1/auth.py` | Route stubs (Stage 7) |
+| `backend/services/image_service.py` | `extract_exif()`, `validate_image_size()`, `validate_image_format()` helpers |
+| `backend/main.py` | FastAPI app, lifespan `create_all`, CORS, `/health` |
+| `backend/requirements.txt` | Production dependencies |
+| `requirements-dev.txt` | `pytest`, `httpx`, `pytest-cov` |
+| `pytest.ini` | Test discovery config |
+| `tests/conftest.py` | In-memory SQLite + `StaticPool`; `get_db` override; `clear_tables` autouse fixture |
+| `tests/test_health.py` | Health endpoint |
+| `tests/test_report_schema.py` | GPS validators, enum validators, optional-field defaults |
+| `tests/test_report_api.py` | Report CRUD integration tests incl. security payloads |
+| `tests/test_models.py` | ORM defaults, `updated_at` behaviour, UUID uniqueness |
+| `tests/test_image_service.py` | EXIF extraction, size limits, format validation |
+
+### Test Results — 71 / 71 PASSED
+
+| Test Class | Count | Result |
+|---|---|---|
+| `test_health` | 2 | PASS |
+| `TestExtractExif` | 7 | PASS |
+| `TestValidateImageSize` | 6 | PASS |
+| `TestValidateImageFormat` | 8 | PASS |
+| `test_models` | 9 | PASS |
+| `TestCreateReport` | 9 | PASS |
+| `TestListReports` | 2 | PASS |
+| `TestGetReport` | 3 | PASS |
+| `TestReportCreateHappyPath` | 4 | PASS |
+| `TestLatitudeValidation` | 9 | PASS |
+| `TestLongitudeValidation` | 7 | PASS |
+| `TestReportUpdate` | 5 | PASS |
+
+### Anomalies Discovered & Handled
+
+| Anomaly | Finding | Resolution |
+|---|---|---|
+| GPS boundary values | `±90.0` lat and `±180.0` lng must be **accepted** (they are valid poles/antimeridian) | Validators use `<=` not `<`; boundary tests confirm this |
+| EXIF absent on JPEG | Most synthetic / low-quality JPEGs have no EXIF block | `extract_exif()` returns `None` without raising — callers handle gracefully |
+| EXIF absent on PNG/TIFF | PNG has no EXIF standard; TIFF may or may not | Same `None`-return contract covers these cases |
+| Corrupt image bytes | Random bytes fed to Pillow raise internal exceptions | Wrapped in `try/except Exception` — returns `None` for EXIF, raises `ValueError` for format check |
+| Oversized upload | A single byte over the 10 MB limit must fail immediately | `validate_image_size()` checks `len(bytes)` before any I/O |
+| SQL injection in description | `"'; DROP TABLE reports; --"` submitted as description | SQLAlchemy parameterized queries prevent execution; string stored verbatim — verified by test |
+| XSS in string fields | `<script>alert('xss')</script>` in description | JSON API does not render HTML; payload stored and echoed as plain string — correct behaviour |
+| Path traversal in report ID | `GET /api/v1/reports/../../etc/passwd` | FastAPI URL routing rejects the path before it reaches the handler; returns 404 |
+| `updated_at` on fresh insert | Both `created_at` and `updated_at` set by the same lambda, so sub-millisecond difference is possible | Test allows up to 1 second delta on create; strict `>` comparison only on update |
+
+### Technical Debt / Deferred Items
+- `user_id` in `POST /api/v1/reports/` is a hardcoded placeholder UUID — replace with JWT claim in Stage 7.
+- `PATCH` and `DELETE` report endpoints are stubs — implement in Stage 6 alongside filtering.
+- `POST /api/v1/images/analyze` is a stub — implement EXIF extraction + Claude call in Stages 4 and 5.
+- No auth guard on any endpoint yet — add in Stage 7.
+- `land_context` is always stored as `None` for now — GIS intersection layer is a future integration.
+
+---
+
+## 8. Project Status
 
 | # | Stage | Status |
 |---|---|---|
@@ -205,7 +308,7 @@ GET    /api/v1/auth/me               Current user info
 
 ---
 
-## 8. Open Questions / Decisions Deferred
+## 9. Open Questions / Decisions Deferred
 
 - **Image storage**: Local filesystem (simple) vs. object storage like S3 (scalable). Decision deferred until deployment planning.
 - **Maps library**: Leaflet.js (open source, lighter) vs. Mapbox GL JS (better visuals, API key required). To decide in frontend stage.
