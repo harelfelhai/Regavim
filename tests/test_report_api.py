@@ -100,3 +100,17 @@ class TestGetReport:
     def test_malformed_id_returns_404(self, client):
         response = client.get("/api/v1/reports/../../etc/passwd")
         assert response.status_code == 404
+
+
+class TestReportImageIds:
+    def test_new_report_has_empty_image_ids(self, client):
+        data = client.post("/api/v1/reports/", json={}).json()
+        assert "image_ids" in data
+        assert data["image_ids"] == []
+
+    def test_list_endpoint_includes_image_ids_field(self, client):
+        client.post("/api/v1/reports/", json={})
+        reports = client.get("/api/v1/reports/").json()
+        assert len(reports) == 1
+        assert "image_ids" in reports[0]
+        assert reports[0]["image_ids"] == []

@@ -1,6 +1,18 @@
 import api from './api';
 
 /**
+ * Construct the URL for serving the original image binary.
+ * Uses the same base URL as the Axios instance so it works in all environments.
+ *
+ * @param {string} imageId - ID returned by uploadImage
+ * @returns {string} URL suitable for <img src="...">
+ */
+export function getImageFileUrl(imageId) {
+  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+  return `${base}/api/v1/images/${imageId}/file`;
+}
+
+/**
  * Upload an image file and attach it to an existing report.
  * Uses multipart/form-data — axios detects FormData and sets the boundary header.
  *

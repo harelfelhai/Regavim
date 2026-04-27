@@ -24,10 +24,10 @@ const ESRI_ATTR =
   'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
 
 const STATUS_COLOR = {
-  pending: '#2563eb',   // regavim-blue
-  confirmed: '#22c55e', // green-500
-  approved: '#10b981',  // emerald-500
-  rejected: '#9ca3af',  // gray-400
+  pending:   '#f59e0b', // amber-400  — needs action
+  confirmed: '#2563eb', // regavim-blue — coordinator reviewed
+  approved:  '#22c55e', // green-500  — manager approved
+  rejected:  '#9ca3af', // gray-400   — dismissed
 };
 
 function createMarkerIcon(status) {

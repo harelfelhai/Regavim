@@ -10,6 +10,15 @@ export async function fetchReports(filters = {}) {
 }
 
 /**
+ * Fetch a single report by ID.
+ * @param {string} id - Report UUID
+ */
+export async function fetchReport(id) {
+  const { data } = await api.get(`/api/v1/reports/${id}`);
+  return data;
+}
+
+/**
  * Open a new report. All fields optional — an empty report is valid.
  * @param {Object} payload - ReportCreate fields (description, coordinates, land_context)
  */

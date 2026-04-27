@@ -73,3 +73,4 @@ class ReportRead(BaseModel):
     user_lng: Optional[float] = None
     target_lat: Optional[float] = None
     target_lng: Optional[float] = None
+    image_ids: list[str] = []

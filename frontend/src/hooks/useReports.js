@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchReports } from '../services/reports';
 
 /**
- * Fetches the report list on mount and exposes loading / error state.
- * The request is cancelled (result discarded) if the component unmounts
- * before it completes, preventing state updates on dead components.
- * `refresh()` re-triggers the fetch.
+ * Fetches the report list and exposes loading / error state.
+ * Re-fetches automatically when `filters` changes (compared by value via JSON.stringify)
+ * or when `refresh()` is called manually. The request is cancelled on unmount.
  */
 export function useReports(filters = {}) {
   const [reports, setReports] = useState([]);
@@ -14,6 +13,9 @@ export function useReports(filters = {}) {
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  // Stable string key — effect only re-runs when filter values actually change.
+  const filterKey = JSON.stringify(filters);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,8 +39,9 @@ export function useReports(filters = {}) {
     return () => {
       cancelled = true;
     };
+  // filterKey is the serialized form of filters; tick forces a manual refresh.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick]);
+  }, [filterKey, tick]);
 
   return { reports, loading, error, refresh };
 }

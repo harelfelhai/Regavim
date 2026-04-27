@@ -67,16 +67,9 @@ describe('ReportSidebar — report list', () => {
     expect(badges.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('button is disabled for reports with null coordinates', () => {
+  it('all buttons are enabled (detail opens for every report)', () => {
     const buttons = screen.getAllByRole('button');
-    const noCoordButton = buttons.find((b) => b.textContent.includes('No location recorded'));
-    expect(noCoordButton).toBeDisabled();
-  });
-
-  it('button is enabled for reports with valid coordinates', () => {
-    const buttons = screen.getAllByRole('button');
-    const roadButton = buttons.find((b) => b.textContent.includes('Road paving'));
-    expect(roadButton).not.toBeDisabled();
+    buttons.forEach((btn) => expect(btn).not.toBeDisabled());
   });
 
   it('renders a role=list for accessibility', () => {
@@ -84,19 +77,39 @@ describe('ReportSidebar — report list', () => {
   });
 });
 
+describe('ReportSidebar — status badge colors', () => {
+  it('pending badge uses amber styling', () => {
+    render(<ReportSidebar reports={[PENDING]} />);
+    const badge = screen.getByText('pending');
+    expect(badge.className).toContain('amber');
+  });
+
+  it('confirmed badge uses blue styling', () => {
+    render(<ReportSidebar reports={[CONFIRMED]} />);
+    const badge = screen.getByText('confirmed');
+    expect(badge.className).toContain('blue');
+  });
+
+  it('rejected badge uses gray styling', () => {
+    render(<ReportSidebar reports={[NO_DESC]} />);
+    const badge = screen.getByText('rejected');
+    expect(badge.className).toContain('gray');
+  });
+});
+
 describe('ReportSidebar — interaction', () => {
-  it('calls onSelectReport with the report when a mappable item is clicked', () => {
+  it('calls onSelectReport when any item is clicked', () => {
     const onSelect = vi.fn();
     render(<ReportSidebar reports={[PENDING]} onSelectReport={onSelect} />);
     fireEvent.click(screen.getByRole('button'));
     expect(onSelect).toHaveBeenCalledWith(PENDING);
   });
 
-  it('does not call onSelectReport when a no-coords item is clicked', () => {
+  it('calls onSelectReport even for no-coords reports', () => {
     const onSelect = vi.fn();
     render(<ReportSidebar reports={[NO_COORDS]} onSelectReport={onSelect} />);
     fireEvent.click(screen.getByRole('button'));
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith(NO_COORDS);
   });
 
   it('does not throw when onSelectReport is not provided', () => {

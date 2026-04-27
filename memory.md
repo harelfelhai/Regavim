@@ -935,3 +935,73 @@ The AI suggestion pre-selects the `<select>` dropdown. The user can override bef
 | `services/__tests__/images.test.js` | FormData fields, endpoint URLs, data return, error propagation |
 | `hooks/__tests__/useReportForm.test.js` | Full state-machine transitions; error on upload; error on analysis; submit flow |
 | `components/__tests__/ReportForm.test.jsx` | All render states; file input fires handleFileChange; submit calls hook; error message shown |
+
+---
+
+## 22. Stage 3 Phase D — Plan (Admin Management & Advanced Filtering)
+
+### Goal
+Add report detail view (image + metadata + AI reasoning), admin confirmation UI (set `final_category` via PATCH), a filter bar (status + date range), and updated status color coding. All within the existing sidebar using a list/detail toggle pattern.
+
+### Sidebar Toggle Pattern
+When no report is selected:  `FilterBar` + `ReportSidebar` (list).
+When a report is selected:   `ReportDetailPanel` replaces the full sidebar.
+
+The `selectedReportId` in `mapStore` drives the toggle. All list items are now clickable (detail opens for any report, pan only if coords exist).
+
+### Status Color Scheme (updated from Phase B)
+| Status | Color Token | Meaning |
+|---|---|---|
+| `pending` | amber | Needs coordinator action |
+| `confirmed` | blue | Coordinator reviewed, awaiting manager |
+| `approved` | green | Manager approved |
+| `rejected` | gray | Soft-deleted / dismissed |
+
+### Backend Changes
+
+| File | Change |
+|---|---|
+| `backend/models/report.py` | Add `@property image_ids` — returns `[img.id for img in self.images]` |
+| `backend/schemas/report.py` | Add `image_ids: list[str] = []` to `ReportRead` (populated via property) |
+| `backend/api/v1/images.py` | Add `GET /{image_id}/file` → `FileResponse` (serves binary image with correct Content-Type) |
+| `tests/test_report_api.py` | Add 2 tests: `image_ids: []` on new report; `image_ids` contains uploaded image id |
+| `tests/test_images.py` | Add 3 tests for file-serving endpoint (200 + binary, 404, Content-Type) |
+
+### Frontend New Files
+
+| File | Purpose |
+|---|---|
+| `src/components/FilterBar.jsx` | Status `<select>` + from/to `<input type="date">`; calls `onChange({status,dateFrom,dateTo})`; "Clear" button when active |
+| `src/components/ReportDetailPanel.jsx` | Back button, image, metadata grid, AI badge, confirmation form (pending/confirmed only) |
+| `src/hooks/useReportDetail.js` | Fetches single report; exposes `confirmCategory(cat)` → PATCH; manages loading/patching/error state |
+
+### Frontend Updated Files
+
+| File | Change |
+|---|---|
+| `src/services/reports.js` | Add `fetchReport(id)` → `GET /api/v1/reports/{id}` |
+| `src/services/images.js` | Add `getImageFileUrl(id)` → constructs `${VITE_API_BASE_URL}/api/v1/images/{id}/file` |
+| `src/hooks/useReports.js` | Replace `[tick]` dep with `[JSON.stringify(filters), tick]` — re-fetches reactively when filters change |
+| `src/components/MapDashboard.jsx` | Holds `filters` state; builds `activeFilters` for `useReports`; conditionally renders `FilterBar`+`ReportSidebar` vs `ReportDetailPanel` |
+| `src/components/ReportSidebar.jsx` | Update status badge colors (amber/blue/green/gray); make all items clickable |
+| `src/components/Map.jsx` | Update `STATUS_COLOR` map (amber/blue/green/gray) |
+
+### PATCH Flow & Frontend State Update
+
+1. Admin selects a category in `ReportDetailPanel` and clicks "Confirm Category".
+2. `handleConfirm` calls `confirmCategory(value)` from `useReportDetail`.
+3. The hook calls `patchReport(reportId, { final_category: value })`.
+4. On success: the hook calls `setReport(updatedReport)` (the response from PATCH), then calls `onPatched?.()`.
+5. `onPatched` is wired to `refresh()` from `useReports` in `MapDashboard` — this re-fetches the full report list, updating sidebar badges and map marker colors immediately.
+6. On failure: `setPatchError(message)` — error is shown inline below the confirm button; no state is lost.
+
+This gives both **optimistic local update** (the detail panel shows the new status immediately) and **list sync** (the sidebar + map reflect the change after the refetch completes).
+
+### Testing Protocol
+
+| File | New Tests |
+|---|---|
+| `services/__tests__/reports.test.js` | 3 tests for `fetchReport` |
+| `hooks/__tests__/useReportDetail.test.js` | ~11 tests: fetch lifecycle, re-fetch on id change, confirmCategory payload, optimistic update, onPatched callback, error states |
+| `components/__tests__/FilterBar.test.jsx` | ~7 tests: renders, status change, date change, clear button visibility, clear resets |
+| `components/__tests__/ReportDetailPanel.test.jsx` | ~10 tests: loading/error/data states, image shown, metadata, confirm form, patchError, back button |

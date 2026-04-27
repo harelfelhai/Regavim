@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchReports, createReport, patchReport } from '../reports';
+import { fetchReports, fetchReport, createReport, patchReport } from '../reports';
 import api from '../api';
 
 vi.mock('../api', () => ({
@@ -39,6 +39,28 @@ describe('fetchReports', () => {
   it('propagates errors from the API client', async () => {
     api.get.mockRejectedValue(new Error('Network Error'));
     await expect(fetchReports()).rejects.toThrow('Network Error');
+  });
+});
+
+describe('fetchReport', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('calls GET /api/v1/reports/:id', async () => {
+    api.get.mockResolvedValue({ data: { id: 'r-1' } });
+    await fetchReport('r-1');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/reports/r-1');
+  });
+
+  it('returns the report data', async () => {
+    const mock = { id: 'r-1', status: 'pending', image_ids: [] };
+    api.get.mockResolvedValue({ data: mock });
+    const result = await fetchReport('r-1');
+    expect(result).toEqual(mock);
+  });
+
+  it('propagates errors', async () => {
+    api.get.mockRejectedValue(new Error('Not found'));
+    await expect(fetchReport('r-1')).rejects.toThrow('Not found');
   });
 });
 

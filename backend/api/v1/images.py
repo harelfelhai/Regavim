@@ -28,6 +28,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
@@ -167,8 +168,26 @@ async def analyze_image(
 
 @router.get("/{image_id}", response_model=ImageRead)
 def get_image_metadata(image_id: str, db: Session = Depends(get_db)) -> ImageRead:
-    """Return image metadata. The original file (EXIF intact) is at file_path."""
+    """Return image metadata. The original file (EXIF intact) is served by /{id}/file."""
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
     return image
+
+
+@router.get("/{image_id}/file")
+def get_image_file(image_id: str, db: Session = Depends(get_db)) -> FileResponse:
+    """Serve the original image binary (EXIF intact) for display in the browser."""
+    image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
+    if not image:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
+
+    file_path = Path(image.file_path)
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image file not found on disk.",
+        )
+
+    media_type = _EXT_TO_MEDIA_TYPE.get(file_path.suffix.lower(), "application/octet-stream")
+    return FileResponse(path=file_path, media_type=media_type)

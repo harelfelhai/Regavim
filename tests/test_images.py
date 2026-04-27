@@ -423,3 +423,29 @@ class TestAnalyzeEndpoint:
     def test_nonexistent_image_returns_404(self, upload_client):
         response = upload_client.post("/api/v1/images/analyze", data={"image_id": "nonexistent"})
         assert response.status_code == 404
+
+
+# ── File-serving endpoint ─────────────────────────────────────────────────────
+
+class TestFileEndpoint:
+    def test_returns_200_and_binary_content(self, upload_client, report_id):
+        image_bytes = jpeg_no_exif()
+        image_id = _upload(upload_client, report_id, image_bytes).json()["id"]
+        response = upload_client.get(f"/api/v1/images/{image_id}/file")
+        assert response.status_code == 200
+        assert len(response.content) > 0
+
+    def test_content_type_is_image_jpeg(self, upload_client, report_id):
+        image_id = _upload(upload_client, report_id, jpeg_no_exif(), "photo.jpg").json()["id"]
+        response = upload_client.get(f"/api/v1/images/{image_id}/file")
+        assert response.headers["content-type"].startswith("image/jpeg")
+
+    def test_nonexistent_image_id_returns_404(self, upload_client):
+        response = upload_client.get("/api/v1/images/does-not-exist/file")
+        assert response.status_code == 404
+
+    def test_report_image_ids_includes_uploaded_image(self, upload_client, report_id):
+        """After upload, GET /reports/{id} should list the image's id in image_ids."""
+        image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
+        report = upload_client.get(f"/api/v1/reports/{report_id}").json()
+        assert image_id in report["image_ids"]
