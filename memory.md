@@ -24,14 +24,19 @@ An NGO field-reporting tool that lets coordinators document illegal construction
 
 | Layer | Technology | Notes |
 |---|---|---|
-| Frontend | React (PWA) | Mobile-first; offline-capable via service worker |
+| Frontend | React 19 (PWA) | Mobile-first; offline-capable via service worker |
+| Frontend build | Vite 6 | Dev server + production bundler |
+| Frontend styling | Tailwind CSS v3 | Utility-first; responsive mobile-first classes |
+| Frontend state | Zustand | Lightweight global store; no boilerplate |
+| Frontend HTTP | Axios | Centralized instance in `services/api.js` |
+| Frontend testing | Vitest + React Testing Library | Vite-native; MSW for HTTP mocking |
 | Backend | Python + FastAPI | Async, RESTful API |
 | ORM | SQLAlchemy | Declarative models; DB-agnostic |
 | DB (dev) | SQLite | Zero-config local development |
 | DB (prod) | PostgreSQL | Target production database |
 | AI | Anthropic Claude API | Image analysis + category suggestion |
-| Maps | TBD (Leaflet.js or Mapbox GL JS) | To be decided in frontend planning step |
-| Auth | TBD | To be decided; JWT is the likely approach |
+| Maps | TBD (Leaflet.js or Mapbox GL JS) | To be decided in Phase C |
+| Auth | TBD | JWT is the likely approach; Stage 7 |
 
 ---
 
@@ -373,7 +378,7 @@ Responses:
 | 5 | Claude AI integration service | **Done** |
 | 6 | Full report CRUD API | **Done** |
 | 7 | Auth (JWT) | Pending |
-| 8 | Frontend scaffolding (React PWA) | Pending |
+| 8 | Frontend scaffolding — Phase A: Infrastructure & API Client | **Done** |
 | 9 | Report submission flow (UI) | Pending |
 | 10 | Map location picker (UI) | Pending |
 | 11 | Manager dashboard (UI) | Pending |
@@ -654,9 +659,107 @@ Invalid enum values for `status` / `category` → 422. All parameters optional.
 
 ---
 
+## 17. Stage 3 Phase A — Plan (Frontend Infrastructure)
+
+### Goal
+Scaffold the React + Vite + Tailwind frontend, establish the folder structure and API client, and build a single `Status` component that proves the frontend can talk to the backend health-check endpoint. No forms, no map, no auth yet.
+
+### Folder Structure
+```
+frontend/
+├── src/
+│   ├── components/         # Reusable UI components
+│   │   └── Status.jsx      # Phase A: health-check indicator
+│   ├── services/
+│   │   └── api.js          # Centralized Axios instance
+│   ├── hooks/              # Custom React hooks (Phase B+)
+│   ├── store/              # Zustand stores (Phase B+)
+│   ├── test/
+│   │   └── setup.js        # Vitest + Testing Library bootstrap
+│   ├── App.jsx
+│   ├── index.css           # Tailwind directives
+│   └── main.jsx
+├── .env.example
+├── vite.config.js          # Includes Vitest test config
+├── tailwind.config.js
+└── package.json
+```
+
+### API Client Design
+```javascript
+// src/services/api.js
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
+  timeout: 10_000,
+  headers: { 'Content-Type': 'application/json' },
+});
+```
+`VITE_API_BASE_URL` is set per-environment via `.env` files. Defaults to local FastAPI dev server.
+
+### Status Component States
+| State | Trigger | Display |
+|---|---|---|
+| `checking` | Initial render, before fetch completes | Spinner + "Checking…" |
+| `connected` | GET /health returns 2xx | Green dot + "Backend Connected" |
+| `error` | Network error or non-2xx | Red dot + "Backend Offline" |
+
+### Phase A Testing Protocol
+
+| Test | Method | Assertion |
+|---|---|---|
+| Shows loading on mount | MSW handler never resolves | "Checking" text visible |
+| Shows connected on 200 | MSW returns `{status:"ok"}` | "Connected" text visible |
+| Shows error on network failure | MSW returns network error | "Offline" text visible |
+| Shows error on 5xx | MSW returns 500 | "Offline" text visible |
+
+---
+
+## 18. Stage 3 Phase A — Completion Summary
+
+### What Was Built
+
+| File | Purpose |
+|---|---|
+| `frontend/` | Vite 8 + React 19 project (npm create vite --template react) |
+| `frontend/src/services/api.js` | Axios instance; `baseURL` from `VITE_API_BASE_URL` env var, fallback `localhost:8000` |
+| `frontend/src/components/Status.jsx` | Three-state indicator: checking / connected / error; `role="status"` + `aria-live` |
+| `frontend/src/components/__tests__/Status.test.jsx` | 9 unit tests; api.js mocked with `vi.mock` |
+| `frontend/src/test/setup.js` | Vitest bootstrap — imports `@testing-library/jest-dom` |
+| `frontend/src/hooks/` | Placeholder directory (Phase B+) |
+| `frontend/src/store/` | Placeholder directory (Phase B+) |
+| `frontend/tailwind.config.js` | Tailwind v3 — content paths for `src/**/*.{js,jsx}` |
+| `frontend/vite.config.js` | Added Vitest test config: globals, jsdom environment, setup files |
+| `frontend/.env.example` | Documents `VITE_API_BASE_URL` |
+
+### Test Results — 9 / 9 PASSED
+
+| Test | Scenario | Result |
+|---|---|---|
+| Initial render — checking text visible | Never-resolving promise | PASS |
+| Accessibility — `role=status` present | - | PASS |
+| Happy path — connected text after 200 | Mock resolves `{status:"ok"}` | PASS |
+| Calls GET /health on mount | Mock resolves | PASS |
+| Only calls health endpoint once | Mock resolves | PASS |
+| Network error → offline text | Mock rejects with Error | PASS |
+| 500 server error → offline text | Mock rejects with 500 response | PASS |
+| 503 server unavailable → offline text | Mock rejects with 503 response | PASS |
+| Error state — connected text absent | Mock rejects | PASS |
+
+### Key Decisions
+- **Mocking strategy**: `vi.mock('../../services/api')` rather than MSW — cleaner for unit tests since axios in jsdom/node has inconsistent interceptor behaviour across environments. MSW reserved for integration tests in Phase B+.
+- **Tailwind v3**: Pinned to v3 (`^3.4.x`) for stability; v4 has a different `@import` config syntax.
+- **No App.css**: Vite scaffold's `App.css` replaced; all styles go through Tailwind utilities.
+
+### Technical Debt / Deferred Items
+- No PWA service worker yet — add in final deployment phase.
+- `hooks/` and `store/` are empty placeholders — populated in Phase B.
+- No proxy configured for dev server — developers must have the backend running on port 8000 or set `VITE_API_BASE_URL`.
+
+---
+
 ## 9. Open Questions / Decisions Deferred
 
 - **Image storage**: Local filesystem (simple) vs. object storage like S3 (scalable). Decision deferred until deployment planning.
-- **Maps library**: Leaflet.js (open source, lighter) vs. Mapbox GL JS (better visuals, API key required). To decide in frontend stage.
+- **Maps library**: Leaflet.js (open source, lighter) vs. Mapbox GL JS (better visuals, API key required). To decide in Phase C.
 - **Auth scope**: Is self-registration allowed, or is user creation admin-only? To clarify with stakeholder.
 - **Offline support depth**: Read-only offline (cache dashboard) or full offline report drafting with sync? PWA complexity depends on this.
