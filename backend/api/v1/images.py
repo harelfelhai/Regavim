@@ -31,10 +31,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from backend.api.deps import get_current_user
 from backend.core.config import settings
 from backend.db.session import get_db
 from backend.models.image import Image as ImageModel
 from backend.models.report import Report as ReportModel
+from backend.models.user import User
 from backend.schemas.image import AnalysisResult, ImageRead
 from backend.services.ai_service import analyze_image_with_claude
 from backend.services.image_service import (
@@ -78,6 +80,7 @@ async def upload_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     storage: StorageProvider = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
 ) -> ImageRead:
     """
     Accept a multipart image upload, extract EXIF, and attach it to a report.
@@ -127,6 +130,7 @@ async def upload_image(
 async def analyze_image(
     image_id: str = Form(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> AnalysisResult:
     """
     Submit an already-uploaded image to Claude for violation category suggestion.
@@ -167,7 +171,11 @@ async def analyze_image(
 
 
 @router.get("/{image_id}", response_model=ImageRead)
-def get_image_metadata(image_id: str, db: Session = Depends(get_db)) -> ImageRead:
+def get_image_metadata(
+    image_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImageRead:
     """Return image metadata. The original file (EXIF intact) is served by /{id}/file."""
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:
@@ -176,7 +184,11 @@ def get_image_metadata(image_id: str, db: Session = Depends(get_db)) -> ImageRea
 
 
 @router.get("/{image_id}/file")
-def get_image_file(image_id: str, db: Session = Depends(get_db)) -> FileResponse:
+def get_image_file(
+    image_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
     """Serve the original image binary (EXIF intact) for display in the browser."""
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:

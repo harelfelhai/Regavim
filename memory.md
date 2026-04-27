@@ -1005,3 +1005,122 @@ This gives both **optimistic local update** (the detail panel shows the new stat
 | `hooks/__tests__/useReportDetail.test.js` | ~11 tests: fetch lifecycle, re-fetch on id change, confirmCategory payload, optimistic update, onPatched callback, error states |
 | `components/__tests__/FilterBar.test.jsx` | ~7 tests: renders, status change, date change, clear button visibility, clear resets |
 | `components/__tests__/ReportDetailPanel.test.jsx` | ~10 tests: loading/error/data states, image shown, metadata, confirm form, patchError, back button |
+
+---
+
+## 23. Stage E1 — Plan (Backend Security & JWT Authentication)
+
+### Why JWT over session-based auth
+
+JWT is **stateless** — the token is self-verifying (signed payload, no server lookup required per request). This fits the project's constraints:
+
+| Concern | JWT | Sessions |
+|---|---|---|
+| Scalability | Any instance verifies the token — no shared session store | Requires Redis/DB session store shared across instances |
+| Mobile / PWA | Authorization header (no CSRF risk) | Cookies require SameSite guards |
+| Offline capability | Token cached on device; refreshed when online | Server session must be live |
+| Simplicity | Single secret key, standard `python-jose` | Session store + middleware + CSRF tokens |
+
+Tradeoff acknowledged: JWT tokens cannot be individually revoked before expiry (a stolen token is valid until `exp`). Mitigation: short expiry (24 h) + token refresh endpoint (planned Stage 7+).
+
+### Token Design
+```
+Header: { "alg": "HS256", "typ": "JWT" }
+Payload: { "sub": "<user_id>", "role": "coordinator|manager|admin", "exp": <unix_ts> }
+Signed with settings.SECRET_KEY using HMAC-SHA256.
+```
+
+### New Files
+
+| File | Purpose |
+|---|---|
+| `backend/core/security.py` | `hash_password`, `verify_password`, `create_access_token`, `decode_access_token`, `oauth2_scheme` |
+| `backend/schemas/user.py` | `UserCreate`, `UserRead`, `LoginRequest`, `TokenResponse` |
+| `backend/api/deps.py` | `get_current_user(token, db) → User` FastAPI dependency |
+| `tests/test_auth.py` | Auth endpoint test suite (~13 tests) |
+
+### Modified Files
+
+| File | Change |
+|---|---|
+| `backend/api/v1/auth.py` | Implement `POST /register`, `POST /login`, `GET /me` |
+| `backend/api/v1/reports.py` | Add `current_user = Depends(get_current_user)` to all routes; `create_report` uses `current_user.id` |
+| `backend/api/v1/images.py` | Same protection |
+| `tests/conftest.py` | Add global `get_current_user` override (stub user id=placeholder); add `auth_client` fixture |
+
+### Dependency Chain
+```
+Request → OAuth2PasswordBearer (extracts Bearer token)
+        → decode_access_token (verifies signature + expiry, raises 401 on failure)
+        → get_current_user (looks up User by sub, raises 401 if not found)
+        → route handler receives User object
+```
+
+### Endpoint Contracts
+
+```
+POST /api/v1/auth/register    — public; body: {email, password, role?}; 201 UserRead | 409
+POST /api/v1/auth/login       — public; body: {email, password}; 200 TokenResponse | 401
+GET  /api/v1/auth/me          — protected; 200 UserRead | 401
+
+All /api/v1/reports/* and /api/v1/images/* endpoints — protected; 401 without valid Bearer token
+```
+
+### Test Strategy
+- **Existing tests** (179): `conftest.py` adds a global `get_current_user` override returning a stub `User(id="00000000-0000-0000-0000-000000000001")` — same ID as the old placeholder, so zero changes to existing tests
+- **New `test_auth.py`** uses `auth_client` fixture that **pops** the override temporarily, tests real JWT flow without stub bypassing auth
+
+### Phase E1 Anomaly Focus
+
+| Anomaly | Expected Behaviour |
+|---|---|
+| Login with wrong password | 401 — identical error message as nonexistent email (prevents user enumeration) |
+| Duplicate email on register | 409 Conflict |
+| Missing Authorization header | 401 from OAuth2PasswordBearer before reaching handler |
+| Malformed/tampered token | 401 from `decode_access_token` (JWTError) |
+| Expired token | 401 — same JWTError path |
+| Token with nonexistent user_id | 401 — `get_current_user` queries DB, returns 401 |
+| `hashed_password` in response | Must be absent — `UserRead` schema does not include it |
+
+---
+
+## 24. Stage E1 — Completion Summary
+
+### What Was Built
+
+| File | Change |
+|---|---|
+| `backend/core/security.py` | **New** — `hash_password`, `verify_password`, `create_access_token`, `decode_access_token`, `oauth2_scheme`; JWT implemented with stdlib HMAC-SHA256 + `bcrypt` direct (no `python-jose`/`passlib` — both crash due to `cryptography` pyo3 incompatibility on this system) |
+| `backend/schemas/user.py` | **New** — `UserCreate`, `LoginRequest`, `TokenResponse`, `UserRead` |
+| `backend/api/deps.py` | **New** — `get_current_user` FastAPI dependency: extracts Bearer token → verifies → loads User from DB |
+| `backend/api/v1/auth.py` | Implemented `POST /register` (201/409), `POST /login` (200/401), `GET /me` (200/401) |
+| `backend/api/v1/reports.py` | All 5 routes now depend on `get_current_user`; `create_report` uses `current_user.id` |
+| `backend/api/v1/images.py` | All 4 routes now depend on `get_current_user` |
+| `tests/conftest.py` | Added global `get_current_user` stub override (stub user id = old placeholder UUID); added `auth_client` fixture that pops/restores override for real auth tests |
+| `tests/test_auth.py` | **New** — 21 tests: TestRegister (5), TestLogin (6), TestGetMe (6), TestEndpointProtection (4) |
+
+### Test Results — 206 / 206 PASSED (21 new)
+
+| Test Class | Count | Result |
+|---|---|---|
+| `TestRegister` | 5 | PASS |
+| `TestLogin` | 6 | PASS |
+| `TestGetMe` | 6 | PASS |
+| `TestEndpointProtection` | 4 | PASS |
+| All Stage E (prior) | 185 | PASS (no regressions) |
+
+### Anomalies Discovered & Handled
+
+| Anomaly | Finding | Resolution |
+|---|---|---|
+| `python-jose[cryptography]` crash | pyo3 Rust panic in `cryptography.hazmat.bindings._rust` — system `cryptography` package incompatible with installed pyo3 bindings | Implemented JWT with stdlib `hmac`/`hashlib`/`base64` + `bcrypt` direct; zero native crypto deps |
+| `passlib[bcrypt]` crash | `passlib` reads `bcrypt.__about__.__version__` which was removed in `bcrypt >= 4.0` | Used `bcrypt` module directly (`hashpw`/`checkpw`/`gensalt`) — no passlib wrapper |
+| Existing test isolation | All 185 existing tests POST/GET/PATCH/DELETE routes that now require auth | Global `get_current_user` override in conftest returns stub user — zero changes to existing tests |
+| User enumeration via login timing | Same 401 status + same error message for wrong password and nonexistent email | Verified by dedicated test: `wrong_password_and_missing_email_same_message` |
+
+### Technical Debt / Deferred Items
+- `POST /api/v1/auth/refresh` stub still not implemented — token refresh deferred to later stage.
+- `SECRET_KEY` defaults to `"change-me-before-production"` — must be rotated before deployment.
+- No role-based authorization (RBAC) yet — `current_user.role` is stored but not checked. Add `require_role("manager")` guards in Stage 7+.
+- No rate limiting on `/login` — brute-force protection needed before production.
+- Revocation not possible with stateless JWT — add a token blocklist (Redis) if short-lived sessions are required.

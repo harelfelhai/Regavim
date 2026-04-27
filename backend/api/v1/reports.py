@@ -1,13 +1,14 @@
 """
 Report endpoints — CRUD for field violation reports.
 
-user_id is a placeholder constant until JWT auth is wired in Stage 7.
+All endpoints require a valid Bearer token (get_current_user dependency).
+create_report uses current_user.id instead of the former placeholder constant.
 
 Lifecycle transitions:
   POST /         → status = pending
   PATCH /{id}    → coordinator sets final_category → auto-advances to confirmed
   DELETE /{id}   → soft-delete (status = rejected; row retained for audit)
-  PATCH /{id}    → manager approval (status = approved, Stage 7)
+  PATCH /{id}    → manager approval (status = approved, Stage 7+)
 """
 
 from datetime import datetime
@@ -16,25 +17,26 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.api.deps import get_current_user
 from backend.core.constants import ReportStatus, ViolationCategory
 from backend.db.session import get_db
 from backend.models.report import Report as ReportModel
+from backend.models.user import User
 from backend.schemas.report import ReportCreate, ReportRead, ReportUpdate
 from backend.services.report_service import apply_report_filters
 
 router = APIRouter()
 
-_PLACEHOLDER_USER_ID = "00000000-0000-0000-0000-000000000001"
-
 
 @router.post("/", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
-def create_report(payload: ReportCreate, db: Session = Depends(get_db)):
-    """
-    Open a new report.
-    The image is uploaded and analyzed separately via POST /api/v1/images/analyze.
-    """
+def create_report(
+    payload: ReportCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Open a new report owned by the authenticated user."""
     report = ReportModel(
-        user_id=_PLACEHOLDER_USER_ID,
+        user_id=current_user.id,
         status=ReportStatus.PENDING.value,
         **payload.model_dump(),
     )
@@ -52,6 +54,7 @@ def list_reports(
     date_to: Optional[datetime] = None,
     reporter_id: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Return reports with optional filters.
@@ -73,7 +76,11 @@ def list_reports(
 
 
 @router.get("/{report_id}", response_model=ReportRead)
-def get_report(report_id: str, db: Session = Depends(get_db)):
+def get_report(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Return a single report by ID."""
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
@@ -83,7 +90,10 @@ def get_report(report_id: str, db: Session = Depends(get_db)):
 
 @router.patch("/{report_id}", response_model=ReportRead)
 def update_report(
-    report_id: str, payload: ReportUpdate, db: Session = Depends(get_db)
+    report_id: str,
+    payload: ReportUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Update a report's mutable fields.
@@ -122,7 +132,11 @@ def update_report(
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_report(report_id: str, db: Session = Depends(get_db)):
+def delete_report(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Soft-delete a report by setting its status to rejected.
     The row is retained for legal audit purposes.
