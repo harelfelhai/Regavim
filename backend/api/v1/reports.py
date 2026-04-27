@@ -2,22 +2,28 @@
 Report endpoints — CRUD for field violation reports.
 
 user_id is a placeholder constant until JWT auth is wired in Stage 7.
-All business logic beyond basic DB access will move to report_service in Stage 3.
+
+Lifecycle transitions:
+  POST /         → status = pending
+  PATCH /{id}    → coordinator sets final_category → auto-advances to confirmed
+  DELETE /{id}   → soft-delete (status = rejected; row retained for audit)
+  PATCH /{id}    → manager approval (status = approved, Stage 7)
 """
 
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.core.constants import ReportStatus
+from backend.core.constants import ReportStatus, ViolationCategory
 from backend.db.session import get_db
 from backend.models.report import Report as ReportModel
 from backend.schemas.report import ReportCreate, ReportRead, ReportUpdate
+from backend.services.report_service import apply_report_filters
 
 router = APIRouter()
 
-# Replaced by the authenticated user's ID once Stage 7 auth is complete.
 _PLACEHOLDER_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
@@ -39,9 +45,31 @@ def create_report(payload: ReportCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[ReportRead])
-def list_reports(db: Session = Depends(get_db)):
-    """Return all reports. Filtering by status, category, and bounding box added in Stage 6."""
-    return db.query(ReportModel).all()
+def list_reports(
+    status: Optional[ReportStatus] = None,
+    category: Optional[ViolationCategory] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    reporter_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Return reports with optional filters.
+
+    status and category are validated against their enums — invalid values return 422.
+    category matches either ai_category or final_category.
+    date_from / date_to accept ISO 8601 datetime strings.
+    """
+    query = db.query(ReportModel)
+    query = apply_report_filters(
+        query,
+        status=status.value if status else None,
+        category=category.value if category else None,
+        date_from=date_from,
+        date_to=date_to,
+        reporter_id=reporter_id,
+    )
+    return query.all()
 
 
 @router.get("/{report_id}", response_model=ReportRead)
@@ -57,11 +85,50 @@ def get_report(report_id: str, db: Session = Depends(get_db)):
 def update_report(
     report_id: str, payload: ReportUpdate, db: Session = Depends(get_db)
 ):
-    """Update status or final category — the core approval-flow endpoint."""
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Stage 6")
+    """
+    Update a report's mutable fields.
+
+    Auto-confirmation: if final_category is being set (non-null), no explicit status
+    is provided, and the current status is pending, the status is automatically
+    advanced to confirmed.
+
+    Read-only fields (ai_category, user_id, coordinates, timestamps) are excluded
+    from ReportUpdate — attempting to send them returns 422.
+    """
+    report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    # Auto-confirm: pending → confirmed when coordinator sets final_category.
+    if (
+        "final_category" in updates
+        and updates["final_category"] is not None
+        and "status" not in updates
+        and report.status == ReportStatus.PENDING.value
+    ):
+        updates["status"] = ReportStatus.CONFIRMED.value
+
+    for field, value in updates.items():
+        # Coerce str-enum instances to their string values for the SQLAlchemy column.
+        if hasattr(value, "value"):
+            value = value.value
+        setattr(report, field, value)
+
+    db.commit()
+    db.refresh(report)
+    return report
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_report(report_id: str, db: Session = Depends(get_db)):
-    """Soft-delete a report (sets status to rejected, does not remove the row)."""
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Stage 6")
+    """
+    Soft-delete a report by setting its status to rejected.
+    The row is retained for legal audit purposes.
+    """
+    report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    report.status = ReportStatus.REJECTED.value
+    db.commit()

@@ -371,7 +371,7 @@ Responses:
 | 3 | ORM models + Pydantic schemas | **Done** (completed as part of Stage 2) |
 | 4 | Image upload endpoint + EXIF handling | **Done** |
 | 5 | Claude AI integration service | **Done** |
-| 6 | Full report CRUD API | Pending |
+| 6 | Full report CRUD API | **Done** |
 | 7 | Auth (JWT) | Pending |
 | 8 | Frontend scaffolding (React PWA) | Pending |
 | 9 | Report submission flow (UI) | Pending |
@@ -533,6 +533,124 @@ TIFF is **not** supported. TIFF uploads succeed (legally valid evidence format) 
 - `PATCH /api/v1/reports/{id}` still a stub — `final_category` confirmation wired up in Stage 6.
 - File deletion on report delete not yet connected — Stage 6.
 - No auth guard on `/analyze` — Stage 7.
+
+---
+
+## 15. Stage 6 — Plan
+
+### Goal
+Complete the report management lifecycle: implement PATCH (confirmation + override), DELETE (soft-delete), and an enhanced GET / with a multi-parameter filtering engine. Keep filtering logic in a dedicated service so the router stays thin.
+
+### New / Changed Files
+
+| File | Change |
+|---|---|
+| `backend/core/constants.py` | Add `CONFIRMED = "confirmed"` to `ReportStatus` |
+| `backend/services/report_service.py` | **New** — `apply_report_filters()` query builder |
+| `backend/schemas/report.py` | Add `ConfigDict(extra="forbid")` to `ReportUpdate` |
+| `backend/api/v1/reports.py` | Implement PATCH, DELETE; add filter query params to GET / |
+| `tests/test_report_management.py` | **New** — Stage 6 test suite |
+
+### Report Lifecycle State Machine
+
+```
+pending ──(set final_category)──► confirmed ──(manager approval, Stage 7)──► approved
+   │                                  │
+   └─────────────────────────────────►└──────(soft-delete / reject)──────────► rejected
+```
+
+Auto-confirmation rule: when PATCH sets a non-null `final_category` AND no explicit `status` is provided AND current status is `pending`, the backend automatically advances status to `confirmed`.
+
+### PATCH Contract
+
+```
+PATCH /api/v1/reports/{id}
+Content-Type: application/json
+
+Allowed fields:   status, final_category, description, land_context
+Read-only fields: ai_category, user_id, user_lat, user_lng, target_lat, target_lng,
+                  created_at, exif_data, image IDs
+→ Sending read-only fields returns 422 (ReportUpdate uses ConfigDict(extra="forbid"))
+
+Responses:
+  200  ReportRead   — success
+  404              — report_id not found
+  422              — unknown field in payload, or invalid enum value
+```
+
+### DELETE Contract (Soft-delete)
+
+```
+DELETE /api/v1/reports/{id}
+
+Sets report.status = "rejected". Row is never physically deleted.
+Responses:
+  204  — success (no body)
+  404  — report_id not found
+```
+
+### GET / Filtering Parameters
+
+| Parameter | Type | Matches |
+|---|---|---|
+| `status` | `ReportStatus` enum | Exact status match |
+| `category` | `ViolationCategory` enum | `ai_category` OR `final_category` |
+| `date_from` | `datetime` (ISO 8601) | `created_at >= date_from` |
+| `date_to` | `datetime` (ISO 8601) | `created_at <= date_to` |
+| `reporter_id` | `str` | `user_id` exact match |
+
+Invalid enum values for `status` / `category` → 422. All parameters optional.
+
+### Stage 6 Anomaly Focus
+
+| Anomaly | Expected Behaviour |
+|---|---|
+| PATCH sets `ai_category` in body | 422 — field forbidden by `extra="forbid"` |
+| PATCH with `final_category` when status is not `pending` | No auto-confirm — current status preserved |
+| PATCH sets `final_category=null` | Clears category; no auto-confirm |
+| DELETE already-rejected report | 204 — idempotent status set |
+| Filter date range with no results | 200 with empty list |
+| Filter by unknown category string | 422 |
+
+---
+
+## 16. Stage 6 — Completion Summary
+
+### What Was Built
+
+| File | Change |
+|---|---|
+| `backend/core/constants.py` | Added `CONFIRMED = "confirmed"` to `ReportStatus` |
+| `backend/services/report_service.py` | **New** — `apply_report_filters()`: chains status, category, date range, reporter_id filters onto a SQLAlchemy query |
+| `backend/schemas/report.py` | Added `ConfigDict(extra="forbid")` to `ReportUpdate` — unknown fields return 422 |
+| `backend/api/v1/reports.py` | Implemented PATCH (auto-confirm logic), DELETE (soft-delete), GET / (5-parameter filter engine) |
+| `tests/test_report_management.py` | **New** — 40 tests across TestPatchReport (17), TestDeleteReport (5), TestListReportsFiltered (18) |
+
+### Test Results — 179 / 179 PASSED (40 new)
+
+| Test Class | Count | Result |
+|---|---|---|
+| `TestPatchReport` | 17 | PASS |
+| `TestDeleteReport` | 5 | PASS |
+| `TestListReportsFiltered` | 18 | PASS |
+| All Stage 5 tests | 33 | PASS (no regressions) |
+| All Stage 4 tests | 35 | PASS (no regressions) |
+| All Stage 2 tests | 71 | PASS (no regressions) |
+
+### Anomalies Discovered & Handled
+
+| Anomaly | Finding | Resolution |
+|---|---|---|
+| `+` in ISO datetime query params | `datetime.isoformat()` with timezone produces `+00:00`; bare `+` in URL query string is parsed as a space, causing 422 | All datetime query params passed via `params=` dict to httpx so `+` is URL-encoded to `%2B` automatically |
+| False-positive date tests | Two tests checking `len(data) == 1` accidentally passed when a 422 error dict was returned (dicts also have length 1) | Added explicit `assert response.status_code == 200` to all date filter tests |
+| Auto-confirm only on pending | If a report is already confirmed, a second `final_category` PATCH should not re-trigger any transition | Guard: `report.status == ReportStatus.PENDING.value` in auto-confirm logic |
+| Soft-delete idempotency | Deleting an already-rejected report should not 404 | Set status unconditionally; 204 on every call as long as the report exists |
+
+### Technical Debt / Deferred Items
+- `category` filter matches on plain-string comparison; if `ViolationCategory` enum grows, the stored strings and enum must stay in sync (no separate FK table).
+- No pagination on `GET /api/v1/reports/` — add `limit` / `offset` or cursor in Stage 8+ when the frontend needs it.
+- Soft-delete: `file_path` is retained on disk. Wire `StorageProvider.delete()` when physical cleanup is needed.
+- No auth guard on PATCH / DELETE — Stage 7.
 
 ---
 

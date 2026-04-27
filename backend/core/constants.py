@@ -19,6 +19,7 @@ class ViolationCategory(str, Enum):
 
 class ReportStatus(str, Enum):
     PENDING = "pending"
+    CONFIRMED = "confirmed"
     APPROVED = "approved"
     REJECTED = "rejected"
 

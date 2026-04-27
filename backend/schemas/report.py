@@ -42,7 +42,12 @@ class ReportCreate(BaseModel):
 
 
 class ReportUpdate(BaseModel):
-    """Payload for PATCH /api/v1/reports/{id} — all fields optional."""
+    """
+    Payload for PATCH /api/v1/reports/{id} — all fields optional.
+    extra='forbid' rejects unknown fields (e.g. ai_category) with 422.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     status: Optional[ReportStatus] = None
     final_category: Optional[ViolationCategory] = None
