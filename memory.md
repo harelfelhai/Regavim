@@ -869,3 +869,69 @@ react-leaflet is mocked with a `vi.mock` shim in Map tests to avoid jsdom/canvas
 - **Maps library**: Resolved — Leaflet.js chosen in Phase B.
 - **Auth scope**: Is self-registration allowed, or is user creation admin-only? To clarify with stakeholder.
 - **Offline support depth**: Read-only offline (cache dashboard) or full offline report drafting with sync? PWA complexity depends on this.
+
+---
+
+## 21. Stage 3 Phase C — Plan (Reporting Form & Image Integration)
+
+### Goal
+Build `ReportForm.jsx`: a multi-step form that lets a coordinator upload an image, receive an AI category suggestion before submitting, and confirm or override it. The form mounts as a modal overlay on the map dashboard.
+
+### Upload Flow (State Machine)
+```
+idle ──(file chosen)──► uploading ──(image uploaded)──► analyzing ──(AI responds)──► ready
+  ↑                        │                                │                          │
+  └──(reset)──────────────┤                                └──(error)──────────────► error
+                           └──(error)──────────────────────────────────────────────► error
+ready ──(submit clicked)──► submitting ──(PATCH OK)──► done
+```
+
+### New Files
+
+| File | Purpose |
+|---|---|
+| `src/services/images.js` | `uploadImage(reportId, file)` → `POST /api/v1/images/upload` (FormData); `analyzeImage(imageId)` → `POST /api/v1/images/analyze` (FormData) |
+| `src/hooks/useReportForm.js` | Orchestrates the full flow: create report → upload → analyze → patch on submit |
+| `src/components/ReportForm.jsx` | UI: upload dropzone, preview, step progress, AI badge, category dropdown, description, submit |
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `src/services/reports.js` | Add `createReport(payload)`, `patchReport(id, payload)` |
+| `src/components/MapDashboard.jsx` | Add "+ New Report" button; show `ReportForm` as modal overlay |
+
+### FormData Usage
+```
+// Upload — multipart/form-data (axios detects FormData, sets boundary automatically)
+const fd = new FormData();
+fd.append('report_id', reportId);   // FastAPI Form field
+fd.append('file', file);            // FastAPI UploadFile field
+await api.post('/api/v1/images/upload', fd);
+
+// Analyze — also multipart (backend uses Form(...) for image_id)
+const fd2 = new FormData();
+fd2.append('image_id', imageId);
+await api.post('/api/v1/images/analyze', fd2);
+```
+
+### Why Upload Before Analyze
+The `/analyze` endpoint fetches the image **from disk by image_id**. It does not accept image bytes directly — the file must already be stored. Therefore:
+1. `createReport` → get `report_id` (required by upload endpoint)
+2. `uploadImage(report_id, file)` → file written to disk, get `image_id`
+3. `analyzeImage(image_id)` → backend reads file from disk, calls Claude, returns category
+
+Steps 2 and 3 cannot be reordered.
+
+### Image Preview
+`URL.createObjectURL(file)` creates a blob URL instantly (no network call). The object URL is revoked on hook cleanup to prevent memory leaks.
+
+### Category Override
+The AI suggestion pre-selects the `<select>` dropdown. The user can override before submitting. If `analysis_available: false`, the dropdown has no default and the user must choose.
+
+### Testing Protocol
+| File | Tests |
+|---|---|
+| `services/__tests__/images.test.js` | FormData fields, endpoint URLs, data return, error propagation |
+| `hooks/__tests__/useReportForm.test.js` | Full state-machine transitions; error on upload; error on analysis; submit flow |
+| `components/__tests__/ReportForm.test.jsx` | All render states; file input fires handleFileChange; submit calls hook; error message shown |

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchReports } from '../reports';
+import { fetchReports, createReport, patchReport } from '../reports';
 import api from '../api';
 
 vi.mock('../api', () => ({
-  default: { get: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
 }));
 
 describe('fetchReports', () => {
@@ -39,5 +39,55 @@ describe('fetchReports', () => {
   it('propagates errors from the API client', async () => {
     api.get.mockRejectedValue(new Error('Network Error'));
     await expect(fetchReports()).rejects.toThrow('Network Error');
+  });
+});
+
+describe('createReport', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('POSTs to /api/v1/reports/ with empty payload by default', async () => {
+    api.post.mockResolvedValue({ data: { id: 'r-1' } });
+    await createReport();
+    expect(api.post).toHaveBeenCalledWith('/api/v1/reports/', {});
+  });
+
+  it('forwards payload fields to the POST body', async () => {
+    api.post.mockResolvedValue({ data: { id: 'r-1' } });
+    await createReport({ description: 'test' });
+    expect(api.post).toHaveBeenCalledWith('/api/v1/reports/', { description: 'test' });
+  });
+
+  it('returns the created report data', async () => {
+    const mock = { id: 'r-1', status: 'pending' };
+    api.post.mockResolvedValue({ data: mock });
+    const result = await createReport({});
+    expect(result).toEqual(mock);
+  });
+
+  it('propagates errors', async () => {
+    api.post.mockRejectedValue(new Error('Create failed'));
+    await expect(createReport()).rejects.toThrow('Create failed');
+  });
+});
+
+describe('patchReport', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('PATCHes /api/v1/reports/:id with the payload', async () => {
+    api.patch.mockResolvedValue({ data: { id: 'r-1' } });
+    await patchReport('r-1', { status: 'confirmed' });
+    expect(api.patch).toHaveBeenCalledWith('/api/v1/reports/r-1', { status: 'confirmed' });
+  });
+
+  it('returns the patched report data', async () => {
+    const mock = { id: 'r-1', status: 'confirmed' };
+    api.patch.mockResolvedValue({ data: mock });
+    const result = await patchReport('r-1', { status: 'confirmed' });
+    expect(result).toEqual(mock);
+  });
+
+  it('propagates errors', async () => {
+    api.patch.mockRejectedValue(new Error('Patch failed'));
+    await expect(patchReport('r-1', {})).rejects.toThrow('Patch failed');
   });
 });
