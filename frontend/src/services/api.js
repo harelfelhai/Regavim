@@ -6,4 +6,16 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!error.response) {
+      // Network failure, CORS block, or DNS error — no HTTP response received.
+      error.isNetworkError = true;
+      error.message = 'Network error — the backend may be offline.';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;

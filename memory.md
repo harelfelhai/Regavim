@@ -379,6 +379,7 @@ Responses:
 | 6 | Full report CRUD API | **Done** |
 | 7 | Auth (JWT) | Pending |
 | 8 | Frontend scaffolding — Phase A: Infrastructure & API Client | **Done** |
+| 8B | Frontend — Phase B: Map Dashboard | **Done** |
 | 9 | Report submission flow (UI) | Pending |
 | 10 | Map location picker (UI) | Pending |
 | 11 | Manager dashboard (UI) | Pending |
@@ -757,9 +758,114 @@ const api = axios.create({
 
 ---
 
+## 19. Stage 3 Phase B — Plan (Map Dashboard)
+
+### Verification Fixes (before new code)
+| Item | Current State | Fix |
+|---|---|---|
+| Axios timeout | `timeout: 10_000` ✓ | Add response interceptor that marks network errors with `isNetworkError = true` |
+| Tailwind color palette | Only Tailwind defaults | Add `regavim` namespace: `bg`, `surface`, `border`, `blue.*`, `navy` |
+
+### New Packages
+- `react-leaflet` + `leaflet` — map rendering
+- `lucide-react` — icon set (Layers, MapPin, AlertCircle, Loader2)
+
+### Component Architecture
+```
+App.jsx
+└── MapDashboard.jsx     — layout shell (sidebar + map pane)
+    ├── ReportSidebar.jsx — scrollable report list, status badges, pan-to button
+    └── Map.jsx           — Leaflet map, layer switcher, color-coded markers
+        └── MapController — internal: watches panTarget, calls map.panTo()
+```
+
+### New Files
+| File | Purpose |
+|---|---|
+| `src/services/reports.js` | `fetchReports(filters)` → `GET /api/v1/reports/` |
+| `src/hooks/useReports.js` | `{ reports, loading, error }` with cancel-on-unmount |
+| `src/store/mapStore.js` | Zustand: `panTarget`, `selectedReportId`, `panTo()`, `selectReport()` |
+| `src/components/Map.jsx` | `MapContainer` + layer control (OSM / Satellite) + markers |
+| `src/components/ReportSidebar.jsx` | Report list, status badges, loading/error/empty states |
+| `src/components/MapDashboard.jsx` | Flex layout: 288px sidebar + full-height map |
+
+### Map Design Decisions
+- **Default center**: `[31.5, 35.0]` (Israel), zoom 8
+- **OSM tile**: `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`
+- **Satellite tile**: Esri World Imagery (free, no API key required)
+- **Markers**: `L.divIcon` with coloured circles — no default icon asset issues in Vite
+- **Status colours**: pending→blue, confirmed→green, approved→emerald, rejected→gray
+- **Invalid coords guard**: `target_lat != null && target_lng != null` — reports without coords appear in sidebar but not on map
+
+### Coordinate Validity Rule
+A report is *mappable* when:
+```
+report.target_lat != null && report.target_lng != null
+```
+Markers for non-mappable reports are silently skipped. The sidebar still shows them with the pan button disabled.
+
+### Testing Protocol
+| Component / Module | Tests |
+|---|---|
+| `services/reports.js` | Calls correct endpoint; returns data; propagates errors |
+| `hooks/useReports.js` | Loading state, success with data, error state, cancel on unmount |
+| `components/ReportSidebar.jsx` | Loading/error/empty states; report list; status badges; disabled button for null coords; pan callback fired |
+| `components/Map.jsx` | Renders without crash on empty list; markers only for valid coords; filters null-coord reports |
+
+react-leaflet is mocked with a `vi.mock` shim in Map tests to avoid jsdom/canvas limitations.
+
+---
+
+## 20. Stage 3 Phase B — Completion Summary
+
+### What Was Built
+
+| File | Purpose |
+|---|---|
+| `src/services/api.js` | Added response interceptor: marks network errors with `isNetworkError = true` |
+| `tailwind.config.js` | Added `regavim.*` color tokens (bg, surface, border, blue.*, navy) |
+| `src/services/reports.js` | `fetchReports(filters)` → `GET /api/v1/reports/` |
+| `src/hooks/useReports.js` | `{ reports, loading, error }` — cancel-on-unmount pattern |
+| `src/store/mapStore.js` | Zustand: `panTarget`, `selectedReportId`, `panTo()`, `selectReport()` |
+| `src/components/Map.jsx` | Leaflet map: OSM + Esri satellite layer switcher; `L.divIcon` colored markers; `MapController` for pan-to |
+| `src/components/ReportSidebar.jsx` | Scrollable report list; status badges; loading/error/empty states; disabled button when coords are null |
+| `src/components/MapDashboard.jsx` | 288px sidebar + full-height map layout |
+| `src/main.jsx` | Added `import 'leaflet/dist/leaflet.css'` before app CSS |
+| `src/services/__tests__/reports.test.js` | 5 tests |
+| `src/hooks/__tests__/useReports.test.js` | 5 tests (incl. cancel-on-unmount) |
+| `src/components/__tests__/ReportSidebar.test.jsx` | 13 tests |
+| `src/components/__tests__/Map.test.jsx` | 11 tests |
+
+### Test Results — 43 / 43 PASSED (34 new)
+
+| Test File | Count | Result |
+|---|---|---|
+| `Status.test.jsx` (Phase A) | 9 | PASS |
+| `reports.test.js` | 5 | PASS |
+| `useReports.test.js` | 5 | PASS |
+| `ReportSidebar.test.jsx` | 13 | PASS |
+| `Map.test.jsx` | 11 | PASS |
+
+### Anomalies Discovered & Handled
+
+| Anomaly | Finding | Resolution |
+|---|---|---|
+| `data-testid` mismatch | Map.jsx passes `data-testid="report-marker"` to Marker; mock default was `"marker"` | Updated tests to query `"report-marker"` consistently |
+| Leaflet CSS in jsdom | Importing `leaflet/dist/leaflet.css` in main.jsx would crash tests | CSS is only imported in `main.jsx`; tests import `Map.jsx` directly, bypassing `main.jsx` — no issue |
+| react-leaflet in jsdom | `MapContainer` expects a real DOM with layout | Mocked entire `react-leaflet` module with `vi.mock` shim; tests verify React-level logic only |
+
+### Technical Debt / Deferred Items
+- No real API integration test (all mocked) — needs backend running for E2E.
+- `useReports` only fetches once on mount; no refresh or polling yet.
+- Map center and zoom are hardcoded to Israel — should become configurable env vars.
+- Sidebar has no search/filter UI — Phase C scope.
+- No PWA manifest yet.
+
+---
+
 ## 9. Open Questions / Decisions Deferred
 
 - **Image storage**: Local filesystem (simple) vs. object storage like S3 (scalable). Decision deferred until deployment planning.
-- **Maps library**: Leaflet.js (open source, lighter) vs. Mapbox GL JS (better visuals, API key required). To decide in Phase C.
+- **Maps library**: Resolved — Leaflet.js chosen in Phase B.
 - **Auth scope**: Is self-registration allowed, or is user creation admin-only? To clarify with stakeholder.
 - **Offline support depth**: Read-only offline (cache dashboard) or full offline report drafting with sync? PWA complexity depends on this.
