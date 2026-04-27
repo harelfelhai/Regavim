@@ -1,7 +1,7 @@
 """
-Image endpoints — upload, EXIF extraction, and (Stage 5) AI analysis.
+Image endpoints — upload, EXIF extraction, and AI classification.
 
-Upload pipeline:
+Upload pipeline  (POST /upload):
   1. Read file bytes via UploadFile (async, non-blocking)
   2. Validate size  → 413 if too large
   3. Validate format → 422 if corrupt or unsupported
@@ -10,6 +10,18 @@ Upload pipeline:
   6. Save via StorageProvider (swappable — local now, S3 later)
   7. Extract EXIF + determine has_exif flag
   8. Persist Image record and return ImageRead
+
+Analysis pipeline (POST /analyze):
+  1. Fetch Image record by image_id → 404 if not found
+  2. Read stored file bytes from disk
+  3. Call Claude via ai_service — returns None on timeout/error (never raises)
+  4. If valid category returned, update report.ai_category
+  5. Return AnalysisResult (analysis_available=False signals degraded state)
+
+Suggested vs. Confirmed:
+  - POST /analyze  → sets report.ai_category  (AI suggestion)
+  - PATCH /reports/{id} → sets report.final_category (human confirmation, Stage 6)
+  These two fields are ALWAYS set independently.
 """
 
 from pathlib import Path
@@ -22,7 +34,8 @@ from backend.core.config import settings
 from backend.db.session import get_db
 from backend.models.image import Image as ImageModel
 from backend.models.report import Report as ReportModel
-from backend.schemas.image import ImageRead
+from backend.schemas.image import AnalysisResult, ImageRead
+from backend.services.ai_service import analyze_image_with_claude
 from backend.services.image_service import (
     exif_has_legal_metadata,
     extract_exif,
@@ -32,6 +45,17 @@ from backend.services.image_service import (
 from backend.services.storage import LocalStorageProvider, StorageProvider
 
 router = APIRouter()
+
+# Media type lookup by file extension — used when reading stored files for analysis.
+_EXT_TO_MEDIA_TYPE: dict[str, str] = {
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+}
 
 
 # ── Dependency ────────────────────────────────────────────────────────────────
@@ -61,39 +85,29 @@ async def upload_image(
     but is never used as the on-disk path — a UUID is used instead to prevent
     path traversal and filename collision.
     """
-    # 1. Read the full payload (async — does not block the event loop).
     content = await file.read()
 
-    # 2. Size gate — reject before any further processing.
     try:
         validate_image_size(content)
     except ValueError as exc:
         raise HTTPException(status_code=413, detail=str(exc))
 
-    # 3. Format gate — reject corrupt or unsupported files.
     try:
         fmt = validate_image_format(content)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # 4. Verify the target report exists.
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
 
-    # 5. Build a collision-free storage key; strip any path components from the
-    #    original name so it is safe to store in the DB without path traversal risk.
     safe_original = Path(file.filename or "unknown").name
     storage_filename = f"{uuid4()}.{fmt.lower()}"
-
-    # 6. Persist to storage backend.
     file_path = storage.save(storage_filename, content)
 
-    # 7. Extract EXIF metadata.
     raw_exif = extract_exif(content)
     has_exif = exif_has_legal_metadata(content)
 
-    # 8. Create the DB record.
     image = ImageModel(
         report_id=report_id,
         file_path=file_path,
@@ -108,16 +122,47 @@ async def upload_image(
     return image
 
 
-@router.post("/analyze")
+@router.post("/analyze", response_model=AnalysisResult)
 async def analyze_image(
-    file: UploadFile = File(...),
+    image_id: str = Form(...),
     db: Session = Depends(get_db),
-) -> dict:
+) -> AnalysisResult:
     """
     Submit an already-uploaded image to Claude for violation category suggestion.
-    Implemented in Stage 5.
+
+    Sets report.ai_category on success. The coordinator confirms (or overrides)
+    via PATCH /api/v1/reports/{id} which sets report.final_category — these are
+    always distinct fields. analysis_available=False means Claude was unavailable;
+    the upload and report are still valid and the coordinator classifies manually.
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Stage 5")
+    image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
+    if not image:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
+
+    file_path = Path(image.file_path)
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image file not found on disk.",
+        )
+
+    file_bytes = file_path.read_bytes()
+    media_type = _EXT_TO_MEDIA_TYPE.get(file_path.suffix.lower(), "image/jpeg")
+
+    suggested_category = analyze_image_with_claude(file_bytes, media_type)
+
+    if suggested_category:
+        report = db.query(ReportModel).filter(ReportModel.id == image.report_id).first()
+        if report:
+            report.ai_category = suggested_category
+            db.commit()
+
+    return AnalysisResult(
+        image_id=image_id,
+        report_id=image.report_id,
+        ai_category=suggested_category,
+        analysis_available=suggested_category is not None,
+    )
 
 
 @router.get("/{image_id}", response_model=ImageRead)

@@ -370,7 +370,7 @@ Responses:
 | 2 | Backend scaffolding (FastAPI skeleton, DB setup) | **Done** |
 | 3 | ORM models + Pydantic schemas | **Done** (completed as part of Stage 2) |
 | 4 | Image upload endpoint + EXIF handling | **Done** |
-| 5 | Claude AI integration service | Pending |
+| 5 | Claude AI integration service | **Done** |
 | 6 | Full report CRUD API | Pending |
 | 7 | Auth (JWT) | Pending |
 | 8 | Frontend scaffolding (React PWA) | Pending |
@@ -426,6 +426,113 @@ Responses:
 - File deletion (`StorageProvider.delete()`) is implemented but never called — wire up to report delete in Stage 6.
 - `UPLOAD_DIR` is relative; should be resolved to an absolute path at startup.
 - No auth guard on the upload endpoint — add in Stage 7.
+
+---
+
+## 13. Stage 5 — Plan
+
+### Goal
+Wire the Claude vision API into the upload pipeline. AI provides a *suggestion* (`ai_category`). A human later confirms via `PATCH /api/v1/reports/{id}` (`final_category`). The two fields are always independent — the AI never sets `final_category`.
+
+### New / Changed Files
+
+| File | Change |
+|---|---|
+| `backend/services/ai_service.py` | **New** — `analyze_image_with_claude()`, `_parse_category()`, `_get_client()` |
+| `backend/schemas/image.py` | Add `AnalysisResult` response schema |
+| `backend/api/v1/images.py` | Implement `POST /api/v1/images/analyze` |
+| `tests/test_ai_service.py` | **New** — unit tests (all API calls mocked) |
+| `tests/test_images.py` | Add `TestAnalyzeEndpoint` class |
+
+### Suggested vs. Confirmed Logic
+
+```
+Upload image  →  POST /api/v1/images/upload     →  Image.has_exif set
+                                                    report.ai_category = None (not yet)
+
+Analyze       →  POST /api/v1/images/analyze    →  report.ai_category = "ILLEGAL_CONSTRUCTION"
+                                                    report.final_category = None  ← never touched here
+
+Human review  →  PATCH /api/v1/reports/{id}     →  report.final_category = "ILLEGAL_CONSTRUCTION"
+                  { "final_category": "..." }       report.status = "approved"
+```
+
+### AI Service Design
+
+```python
+analyze_image_with_claude(image_bytes, media_type) -> str | None
+  │
+  ├─ Guard: media_type not in CLAUDE_SUPPORTED → return None (TIFF not supported)
+  ├─ base64-encode → messages.create(model, max_tokens=32, system_prompt, image)
+  ├─ parse raw text → _parse_category() → ViolationCategory enum validation
+  ├─ APITimeoutError  → return None  (logged, not raised)
+  └─ any Exception   → return None  (degrade gracefully)
+
+_parse_category(raw) -> str | None
+  ├─ strip + uppercase + normalise separators
+  ├─ ViolationCategory(cleaned)  → return canonical value
+  └─ ValueError                  → return None
+```
+
+### Prompt Design
+The system prompt constrains Claude to a single-line response containing only a category name. `max_tokens=32` prevents verbose output and reduces cost. The prompt lists all 7 categories explicitly so Claude has no ambiguity about the output space.
+
+### Claude-Supported Media Types
+Claude vision API accepts: `image/jpeg`, `image/png`, `image/gif`, `image/webp`.
+TIFF is **not** supported. TIFF uploads succeed (legally valid evidence format) but `analyze_image_with_claude()` returns `None` for them — the frontend should show "Manual classification required" in this case.
+
+### Stage 5 Anomaly Focus
+
+| Anomaly | Expected Behaviour |
+|---|---|
+| API timeout (`APITimeoutError`) | Returns `None`; endpoint returns 200 with `analysis_available: false`; `ai_category` unchanged |
+| Invalid category in response | `_parse_category()` returns `None`; same degraded-but-successful response |
+| Verbose/explanatory AI response | `_parse_category()` normalises and validates; garbage text returns `None` |
+| `ai_category` set, `final_category` absent | Verified in test — AI suggestion never populates `final_category` |
+| TIFF image (unsupported by Claude) | `analyze_image_with_claude()` returns `None` before calling API |
+| Empty API response content list | Returns `None` without crash |
+| All 7 categories round-trip | Each category returned by mock is parsed and stored correctly |
+
+---
+
+## 14. Stage 5 — Completion Summary
+
+### What Was Built
+
+| File | Change |
+|---|---|
+| `backend/services/ai_service.py` | **New** — `analyze_image_with_claude()`, `_parse_category()`, `_get_client()`; `_MODEL = "claude-sonnet-4-6"`; TIFF guard; graceful degradation on all error paths |
+| `backend/schemas/image.py` | Added `AnalysisResult` schema — `image_id`, `report_id`, `ai_category`, `analysis_available` |
+| `backend/api/v1/images.py` | Implemented `POST /api/v1/images/analyze` — reads stored file, calls AI, updates `report.ai_category`, returns `AnalysisResult` |
+| `tests/test_ai_service.py` | **New** — 26 unit tests across `TestParseCategory` (14) and `TestAnalyzeImageWithClaude` (12); all API calls mocked |
+| `tests/test_images.py` | Added `TestAnalyzeEndpoint` (7 tests) — integration tests for the `/analyze` endpoint |
+
+### Test Results — 139 / 139 PASSED (33 new)
+
+| Test Class | Count | Result |
+|---|---|---|
+| `TestParseCategory` | 14 | PASS |
+| `TestAnalyzeImageWithClaude` | 12 | PASS |
+| `TestAnalyzeEndpoint` | 7 | PASS |
+| All Stage 4 tests | 35 | PASS (no regressions) |
+| All Stage 2 tests | 71 | PASS (no regressions) |
+
+### Anomalies Discovered & Handled
+
+| Anomaly | Finding | Resolution |
+|---|---|---|
+| API timeout under field conditions | `anthropic.APITimeoutError` is a distinct exception from `Exception` | Caught separately; returns `None`; test constructs it with `httpx.Request` object |
+| TIFF unsupported by Claude vision | TIFF is valid evidence but cannot be sent to Claude API | Guard at top of `analyze_image_with_claude()`; returns `None` before any API call; test confirms `_get_client` never called |
+| Invalid / verbose AI responses | Claude may occasionally return an explanation instead of a category | `_parse_category()` normalises and validates; any non-enum text returns `None` |
+| Suggested ≠ Confirmed | AI must never set `final_category` | `/analyze` only writes to `report.ai_category`; `final_category` stays `None`; explicitly tested |
+| Empty content list from API | `message.content` could be `[]` | Safe guard: `message.content[0].text if message.content else ""`; returns `None` via `_parse_category("")` |
+| `max_tokens` budget | Verbose responses waste cost and complicate parsing | Capped at `max_tokens=32`; test asserts `<= 64` to allow minor future tuning |
+
+### Technical Debt / Deferred Items
+- No real Anthropic API key used in tests (all mocked) — integration smoke test against live API deferred to deployment.
+- `PATCH /api/v1/reports/{id}` still a stub — `final_category` confirmation wired up in Stage 6.
+- File deletion on report delete not yet connected — Stage 6.
+- No auth guard on `/analyze` — Stage 7.
 
 ---
 

@@ -26,3 +26,21 @@ class ImageRead(BaseModel):
     # True when GPS coordinates or DateTimeOriginal were found in EXIF.
     has_exif: bool
     uploaded_at: datetime
+
+
+class AnalysisResult(BaseModel):
+    """
+    Response from POST /api/v1/images/analyze.
+
+    analysis_available distinguishes between 'AI returned a category' (True)
+    and 'AI timed out or was unavailable' (False). The frontend should show
+    a different message for each case so the coordinator knows whether to
+    wait or to classify manually.
+    """
+
+    image_id: str
+    report_id: str
+    # The suggested violation category. None when analysis was unavailable.
+    ai_category: Optional[str]
+    # False on timeout, API error, unsupported format, or invalid AI response.
+    analysis_available: bool
