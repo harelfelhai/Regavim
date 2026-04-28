@@ -14,7 +14,7 @@ Lifecycle transitions:
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user
@@ -120,6 +120,15 @@ def update_report(
     ):
         updates["status"] = ReportStatus.CONFIRMED.value
 
+    # Require a non-empty description before a report can be confirmed.
+    if updates.get("status") == ReportStatus.CONFIRMED:
+        effective_description = updates.get("description") or report.description
+        if not (effective_description and effective_description.strip()):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A description is required to confirm a report.",
+            )
+
     for field, value in updates.items():
         # Coerce str-enum instances to their string values for the SQLAlchemy column.
         if hasattr(value, "value"):
@@ -134,15 +143,33 @@ def update_report(
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_report(
     report_id: str,
+    force: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Soft-delete a report by setting its status to rejected.
-    The row is retained for legal audit purposes.
+    Delete a report.
+
+    Without ?force=true: soft-delete (status → rejected). Row retained for audit.
+    With ?force=true: hard-delete. Only allowed for pending reports with no images attached.
     """
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
-    report.status = ReportStatus.REJECTED.value
+
+    if force:
+        if report.status != ReportStatus.PENDING.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Force-delete is only allowed for pending (draft) reports.",
+            )
+        if report.images:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Force-delete is not allowed when images are attached.",
+            )
+        db.delete(report)
+    else:
+        report.status = ReportStatus.REJECTED.value
+
     db.commit()

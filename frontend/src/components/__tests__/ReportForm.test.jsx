@@ -13,7 +13,7 @@ const defaultHook = {
   error: null,
   handleFileChange: vi.fn(),
   handleSubmit: vi.fn(),
-  reset: vi.fn(),
+  cancelAndCleanup: vi.fn(),
 };
 
 function renderForm(hookOverrides = {}, props = {}) {
@@ -74,11 +74,22 @@ describe('ReportForm — error state', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Upload failed. Please try again.');
   });
 
-  it('calls reset when Try again is clicked', () => {
-    const reset = vi.fn();
-    renderForm({ step: STEP.ERROR, error: 'err', reset });
+  it('calls cancelAndCleanup when Try again is clicked', () => {
+    const cancelAndCleanup = vi.fn();
+    renderForm({ step: STEP.ERROR, error: 'err', cancelAndCleanup });
     fireEvent.click(screen.getByText('Try again'));
-    expect(reset).toHaveBeenCalled();
+    expect(cancelAndCleanup).toHaveBeenCalled();
+  });
+});
+
+describe('ReportForm — close button', () => {
+  it('calls cancelAndCleanup and onClose when X is clicked', () => {
+    const cancelAndCleanup = vi.fn();
+    const onClose = vi.fn();
+    renderForm({ cancelAndCleanup }, { onClose });
+    fireEvent.click(screen.getByLabelText('Close form'));
+    expect(cancelAndCleanup).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 });
 
@@ -91,7 +102,7 @@ describe('ReportForm — ready state', () => {
     error: null,
     handleFileChange: vi.fn(),
     handleSubmit: vi.fn(),
-    reset: vi.fn(),
+    cancelAndCleanup: vi.fn(),
   };
 
   it('shows AI suggestion label', () => {
@@ -112,6 +123,16 @@ describe('ReportForm — ready state', () => {
   it('shows Submit Report button', () => {
     renderForm(readyHook);
     expect(screen.getByRole('button', { name: 'Submit Report' })).toBeInTheDocument();
+  });
+
+  it('Submit button is enabled when a category is selected', () => {
+    renderForm(readyHook);
+    expect(screen.getByRole('button', { name: 'Submit Report' })).not.toBeDisabled();
+  });
+
+  it('Submit button is disabled when no category is selected', () => {
+    renderForm({ ...readyHook, aiCategory: null });
+    expect(screen.getByRole('button', { name: 'Submit Report' })).toBeDisabled();
   });
 
   it('calls handleSubmit on form submit', () => {

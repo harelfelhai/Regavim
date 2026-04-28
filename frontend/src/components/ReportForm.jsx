@@ -42,7 +42,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
     error,
     handleFileChange,
     handleSubmit,
-    reset,
+    cancelAndCleanup,
   } = useReportForm();
 
   // Pre-fill the category dropdown once AI responds.
@@ -60,7 +60,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
   }
 
   function handleReset() {
-    reset();
+    cancelAndCleanup();
     setDescription('');
     setFinalCategory('');
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -96,7 +96,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
         <h2 className="text-base font-semibold text-regavim-navy">New Report</h2>
         <button
-          onClick={onClose}
+          onClick={() => { cancelAndCleanup(); onClose?.(); }}
           aria-label="Close form"
           className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
         >
@@ -226,7 +226,8 @@ export default function ReportForm({ onClose, onSubmitted }) {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full rounded-lg bg-regavim-blue text-white py-2.5 text-sm font-semibold hover:bg-regavim-blue/90 active:scale-[0.98] transition-all"
+              disabled={!displayedCategory}
+              className="w-full rounded-lg bg-regavim-blue text-white py-2.5 text-sm font-semibold hover:bg-regavim-blue/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Submit Report
             </button>

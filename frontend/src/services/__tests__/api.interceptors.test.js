@@ -52,6 +52,22 @@ describe('request interceptor', () => {
     const result = reqInterceptor.fulfilled(config);
     expect(result.headers.Authorization).toBe('Bearer manual-token');
   });
+
+  it('removes Content-Type for FormData requests so the browser sets the multipart boundary', () => {
+    useAuthStore._state.token = null;
+    const config = { headers: { 'Content-Type': 'application/json' }, data: new FormData() };
+    const reqInterceptor = api.interceptors.request.handlers[0];
+    const result = reqInterceptor.fulfilled(config);
+    expect(result.headers['Content-Type']).toBeUndefined();
+  });
+
+  it('keeps Content-Type for non-FormData requests', () => {
+    useAuthStore._state.token = null;
+    const config = { headers: { 'Content-Type': 'application/json' }, data: { foo: 'bar' } };
+    const reqInterceptor = api.interceptors.request.handlers[0];
+    const result = reqInterceptor.fulfilled(config);
+    expect(result.headers['Content-Type']).toBe('application/json');
+  });
 });
 
 describe('response interceptor', () => {

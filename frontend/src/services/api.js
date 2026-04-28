@@ -16,6 +16,12 @@ const api = axios.create({
 // Attach the stored Bearer token to every outgoing request.
 // Does not overwrite a manually-set Authorization header (used during login).
 api.interceptors.request.use((config) => {
+  // FormData requests need the browser to auto-set Content-Type with the
+  // correct multipart boundary. Remove the instance-level 'application/json'
+  // default; otherwise FastAPI receives a malformed body and returns 422.
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   if (!config.headers.Authorization) {
     const token = useAuthStore.getState().token;
     if (token) {

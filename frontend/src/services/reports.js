@@ -37,3 +37,17 @@ export async function patchReport(id, payload) {
   const { data } = await api.patch(`/api/v1/reports/${id}`, payload);
   return data;
 }
+
+/**
+ * Delete a report.
+ * Without force: soft-delete (status → rejected). Row retained for audit.
+ * With force:    hard-delete. Only allowed for pending reports with no images.
+ * @param {string}  id           - Report UUID
+ * @param {Object}  options
+ * @param {boolean} options.force - Hard-delete draft with no images (default false)
+ */
+export async function deleteReport(id, { force = false } = {}) {
+  await api.delete(`/api/v1/reports/${id}`, {
+    params: force ? { force: 'true' } : undefined,
+  });
+}

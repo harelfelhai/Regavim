@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createReport, patchReport } from '../services/reports';
+import { createReport, patchReport, deleteReport } from '../services/reports';
 import { uploadImage, analyzeImage } from '../services/images';
 
 export const STEP = {
@@ -48,9 +48,13 @@ export function useReportForm() {
     setError(null);
     setAiCategory(null);
 
+    // Local variable so the catch block can reference it even before setReportId settles.
+    let createdReportId = null;
+
     try {
       // Step 1 — create an empty draft report to get a report_id.
       const report = await createReport({});
+      createdReportId = report.id;
       setReportId(report.id);
 
       // Step 2 — upload the image to that report.
@@ -66,6 +70,13 @@ export function useReportForm() {
     } catch (err) {
       setError(err?.message ?? 'Upload failed. Please try again.');
       setStep(STEP.ERROR);
+      // Best-effort cleanup: hard-delete the draft (no images) or soft-delete
+      // if an image was already attached before the failure.
+      if (createdReportId) {
+        deleteReport(createdReportId, { force: true }).catch(() => {
+          deleteReport(createdReportId).catch(() => {});
+        });
+      }
     }
   }
 
@@ -98,6 +109,21 @@ export function useReportForm() {
     setError(null);
   }
 
+  /**
+   * Cancel the current flow and clean up any draft record that was already
+   * created on the server. Hard-deletes if no image is attached yet; falls
+   * back to soft-delete (rejected) otherwise. Both are best-effort.
+   */
+  function cancelAndCleanup() {
+    const currentId = reportId; // capture before reset() clears it
+    reset();
+    if (currentId) {
+      deleteReport(currentId, { force: true }).catch(() => {
+        deleteReport(currentId).catch(() => {});
+      });
+    }
+  }
+
   return {
     step,
     imagePreview,
@@ -108,5 +134,6 @@ export function useReportForm() {
     handleFileChange,
     handleSubmit,
     reset,
+    cancelAndCleanup,
   };
 }

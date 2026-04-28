@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchReports, fetchReport, createReport, patchReport } from '../reports';
+import { fetchReports, fetchReport, createReport, patchReport, deleteReport } from '../reports';
 import api from '../api';
 
 vi.mock('../api', () => ({
-  default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
 describe('fetchReports', () => {
@@ -111,5 +111,26 @@ describe('patchReport', () => {
   it('propagates errors', async () => {
     api.patch.mockRejectedValue(new Error('Patch failed'));
     await expect(patchReport('r-1', {})).rejects.toThrow('Patch failed');
+  });
+});
+
+describe('deleteReport', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('DELETEs /api/v1/reports/:id with no params by default (soft-delete)', async () => {
+    api.delete.mockResolvedValue({});
+    await deleteReport('r-1');
+    expect(api.delete).toHaveBeenCalledWith('/api/v1/reports/r-1', { params: undefined });
+  });
+
+  it('passes ?force=true when force option is set (hard-delete)', async () => {
+    api.delete.mockResolvedValue({});
+    await deleteReport('r-1', { force: true });
+    expect(api.delete).toHaveBeenCalledWith('/api/v1/reports/r-1', { params: { force: 'true' } });
+  });
+
+  it('propagates errors', async () => {
+    api.delete.mockRejectedValue(new Error('Delete failed'));
+    await expect(deleteReport('r-1')).rejects.toThrow('Delete failed');
   });
 });
