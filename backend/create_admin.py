@@ -84,6 +84,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    from backend.core.config import settings  # imported here to show the resolved value
+
+    # Always print the active DATABASE_URL so the operator can confirm the script
+    # and the running API server are pointing at the same database.
+    print(f"  Database : {settings.DATABASE_URL}")
+
     try:
         user = create_user(args.email, args.password, args.role)
         print(f"✓ Created {user.role}: {user.email}  (id={user.id})")
