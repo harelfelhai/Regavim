@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Layers, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Layers, LogOut, Plus } from 'lucide-react';
 import { useReports } from '../hooks/useReports';
+import useAuthStore from '../store/authStore';
 import useMapStore from '../store/mapStore';
 import Map from './Map';
 import ReportSidebar from './ReportSidebar';
@@ -11,12 +13,15 @@ import ReportDetailPanel from './ReportDetailPanel';
 const EMPTY_FILTERS = { status: '', dateFrom: '', dateTo: '' };
 
 export default function MapDashboard() {
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
   const [showForm, setShowForm] = useState(false);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
 
   const { panTarget, panTo, selectedReportId, selectReport, clearSelection } = useMapStore();
 
-  // Convert UI filter state to API query params.
   const activeFilters = useMemo(() => {
     const f = {};
     if (filters.status) f.status = filters.status;
@@ -39,8 +44,9 @@ export default function MapDashboard() {
     refresh();
   }
 
-  function handlePatched() {
-    refresh();
+  function handleLogout() {
+    logout();
+    navigate('/login', { replace: true });
   }
 
   return (
@@ -78,7 +84,7 @@ export default function MapDashboard() {
               key={selectedReportId}
               reportId={selectedReportId}
               onBack={clearSelection}
-              onPatched={handlePatched}
+              onPatched={refresh}
             />
           ) : (
             <>
@@ -92,6 +98,22 @@ export default function MapDashboard() {
             </>
           )}
         </div>
+
+        {/* ── Footer: user info + logout ───────────────────────────────── */}
+        <footer className="px-4 py-3 border-t border-regavim-border flex-shrink-0 flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-400 truncate" title={user?.email}>
+            {user?.email ?? ''}
+          </span>
+          <button
+            onClick={handleLogout}
+            aria-label="Sign out"
+            title="Sign out"
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+          >
+            <LogOut size={13} />
+            Sign out
+          </button>
+        </footer>
       </aside>
 
       {/* ── Map ─────────────────────────────────────────────────────────── */}

@@ -27,7 +27,7 @@ function renderLoginPage(initialPath = '/login') {
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<div>Dashboard</div>} />
+        <Route path="/map" element={<div>Dashboard</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -105,7 +105,7 @@ describe('LoginPage', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Login failed'));
   });
 
-  it('navigates to / on successful login', async () => {
+  it('navigates to /map on successful login', async () => {
     loginUser.mockResolvedValueOnce({ user: { id: 'u1' }, token: 'tok' });
     const user = userEvent.setup();
     renderLoginPage();

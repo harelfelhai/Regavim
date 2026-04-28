@@ -377,13 +377,10 @@ Responses:
 | 4 | Image upload endpoint + EXIF handling | **Done** |
 | 5 | Claude AI integration service | **Done** |
 | 6 | Full report CRUD API | **Done** |
-| 7 | Auth (JWT) | Pending |
-| 8 | Frontend scaffolding — Phase A: Infrastructure & API Client | **Done** |
-| 8B | Frontend — Phase B: Map Dashboard | **Done** |
-| 9 | Report submission flow (UI) | Pending |
-| 10 | Map location picker (UI) | Pending |
-| 11 | Manager dashboard (UI) | Pending |
-| 12 | End-to-end testing & deployment config | Pending |
+| E1 | Backend JWT authentication | **Done** |
+| D | Frontend — Phase C: ReportForm + Phase D: Detail/Filters | **Done** |
+| E2 | Frontend JWT authentication | **Done** |
+| F | Final Integration & Usability (MVP) | **Done** |
 
 ---
 
@@ -1207,3 +1204,90 @@ LoginPage submit:
 | `services/__tests__/api.interceptors.test.js` | request adds Authorization when token set; no header when no token; does not overwrite existing header; 401 calls logout; non-401 errors not intercepted |
 | `components/__tests__/LoginPage.test.jsx` | renders email+password fields; submit calls loginUser; shows loading; shows error on failure; navigates to / on success |
 | `components/__tests__/ProtectedRoute.test.jsx` | renders children when token present; redirects to /login when no token |
+
+---
+
+## 26. Phase F — Final Integration & Usability (MVP)
+
+### Goal
+Close all remaining gaps between a working demo and a first deployable MVP:
+admin account bootstrap, full auth UX (logout + root redirect), polished
+bootstrap spinner, and an architecture explanation for future maintainers.
+
+### New / Changed Files
+
+| File | Change |
+|---|---|
+| `backend/create_admin.py` | **New** — CLI script; `create_user(email, password, role, _db)` reuses ORM + security layer; `main()` uses argparse |
+| `tests/test_create_admin.py` | **New** — 9 tests: create, role default, password hashing, duplicate detection, all roles |
+| `frontend/src/App.jsx` | Routing overhaul: `/map` for dashboard, `/` → RootRedirect (token-aware), `*` fallback; bootstrap spinner upgraded to Loader2 icon |
+| `frontend/src/components/MapDashboard.jsx` | Added sidebar footer: user email display + Sign out button (calls `logout()` then navigates to `/login`) |
+| `frontend/src/components/LoginPage.jsx` | `navigate('/')` → `navigate('/map')` after successful login |
+| `frontend/src/components/__tests__/MapDashboard.test.jsx` | **New** — 6 tests: logout calls store, navigates to /login, user email shown, layout smoke tests |
+| `frontend/src/components/__tests__/LoginPage.test.jsx` | Updated route from `/` to `/map` in navigation test |
+
+### Test Results — 215 backend / 170 frontend (all passing)
+
+| Test Class | Count | Result |
+|---|---|---|
+| `TestCreateUser` | 9 | PASS |
+| `MapDashboard — logout` | 4 | PASS |
+| `MapDashboard — layout` | 2 | PASS |
+| All prior backend tests | 206 | PASS (no regressions) |
+| All prior frontend tests | 164 | PASS (no regressions) |
+
+---
+
+## 27. Architecture Notes
+
+### How `create_admin.py` shares logic with the API
+
+The script imports the same three modules the live API uses:
+
+```
+backend.models.user.User           ← same SQLAlchemy model, same table
+backend.db.session.SessionLocal    ← same connection pool + DATABASE_URL
+backend.core.security.hash_password ← same bcrypt rounds, same output format
+```
+
+Because the script writes through SQLAlchemy (not raw SQL), and hashes the
+password with the identical function, a row created by the script is
+indistinguishable from one created via `POST /api/v1/auth/register`. The API's
+`verify_password` call will succeed against either. There is no separate admin
+code path — only one source of truth for each concern.
+
+### App Bootstrap Sequence
+
+```
+Browser loads the React app
+        │
+        ▼
+App mounts — reads token from sessionStorage (via Zustand persist)
+        │
+        ├─ No token ──────────────────────────────────────────► router mounts immediately
+        │                                                          / → RootRedirect → /login
+        │
+        └─ Token found ──► show full-screen spinner
+                                │
+                                ▼
+                          GET /api/v1/auth/me  (Bearer: <token>)
+                                │
+                          ┌─────┴─────┐
+                        200 OK      401 / error
+                          │              │
+                    hydrate user    response interceptor
+                    in authStore    calls logout() → clears token
+                          │              │
+                          └─────┬────────┘
+                                ▼
+                       bootstrapped = true
+                       router mounts
+                       / → RootRedirect:
+                         token present → /map
+                         token absent  → /login
+```
+
+Key guarantee: the protected `/map` route is never rendered while the token
+verification is in flight. The spinner blocks all routes until `bootstrapped`
+is `true`, so there is no flash of authenticated UI before the check resolves.
+
