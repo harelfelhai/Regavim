@@ -1124,3 +1124,86 @@ All /api/v1/reports/* and /api/v1/images/* endpoints — protected; 401 without 
 - No role-based authorization (RBAC) yet — `current_user.role` is stored but not checked. Add `require_role("manager")` guards in Stage 7+.
 - No rate limiting on `/login` — brute-force protection needed before production.
 - Revocation not possible with stateless JWT — add a token blocklist (Redis) if short-lived sessions are required.
+
+---
+
+## 25. Stage E2 — Plan (Frontend Authentication)
+
+### Login-State Persistence (sessionStorage vs alternatives)
+
+| Storage | Survives page refresh | Survives tab close | Survives browser restart |
+|---|---|---|---|
+| In-memory (React state only) | ✗ — lost on refresh | ✗ | ✗ |
+| `sessionStorage` | ✓ | ✗ — wiped on tab close | ✗ |
+| `localStorage` | ✓ | ✓ | ✓ |
+
+We use **sessionStorage** per the security requirement. Zustand's `persist` middleware with `createJSONStorage(() => sessionStorage)` handles reading/writing transparently. Only the `token` is persisted (not `user`, which is re-fetched via `GET /me` on page load to confirm the token is still valid).
+
+### 401 Auto-Logout: How the Interceptor Works
+
+```
+Any API call → response interceptor runs:
+  ├── status 2xx → pass through unchanged
+  ├── no response (network error) → tag isNetworkError = true
+  └── status 401 → useAuthStore.getState().logout()   ← clears token from store + sessionStorage
+                   window.location.href = '/login'     ← hard redirect (flushes React state)
+```
+
+`useAuthStore.getState()` is called outside React's render cycle (safe in an Axios interceptor). The hard `window.location.href` redirect ensures all React component state is discarded — no stale UI can remain visible after session expiry.
+
+The request interceptor runs **before** every outgoing request:
+```
+Request interceptor:
+  token = useAuthStore.getState().token   // read from store (synced from sessionStorage)
+  if token && no Authorization header already set:
+    config.headers.Authorization = `Bearer ${token}`
+```
+
+Checking `!config.headers.Authorization` prevents the interceptor from overwriting a manually-passed header (used during login where the token hasn't been stored yet).
+
+### New Files
+
+| File | Purpose |
+|---|---|
+| `src/store/authStore.js` | Zustand store with `persist` (sessionStorage); `user`, `token`, `login(user,token)`, `logout()` |
+| `src/services/auth.js` | `loginUser(email,pw)` → POST /login then GET /me; `fetchMe()` → GET /me |
+| `src/components/LoginPage.jsx` | White-card login form; email+password+show/hide; error message; loading state |
+| `src/components/ProtectedRoute.jsx` | Reads `token` from store; redirects to `/login` if absent |
+
+### Modified Files
+
+| File | Change |
+|---|---|
+| `src/services/api.js` | Add request interceptor (Bearer token); extend response interceptor (401 → logout + redirect) |
+| `src/App.jsx` | Add `BrowserRouter` + `Routes`; auth bootstrap effect (`GET /me` on load to verify stored token); loading state while bootstrapping |
+
+### Component / Data Flow
+
+```
+App (bootstrap)
+ ├── has token + GET /me succeeds → user stored, show dashboard
+ ├── has token + GET /me 401      → logout() called by interceptor, redirect to /login
+ └── no token                     → show /login immediately
+
+BrowserRouter
+ ├── /login          → LoginPage (public)
+ └── /*              → ProtectedRoute → MapDashboard (requires token in store)
+
+LoginPage submit:
+  loginUser(email, pw)
+    → POST /api/v1/auth/login    (no auth header)
+    → GET  /api/v1/auth/me       (manual Bearer header)
+    → returns { user, token }
+  authStore.login(user, token)   → stored in sessionStorage
+  navigate('/')
+```
+
+### Testing Protocol
+
+| File | Tests |
+|---|---|
+| `store/__tests__/authStore.test.js` | initial state; `login` sets user+token; `logout` clears both; token written to / read from sessionStorage |
+| `services/__tests__/auth.test.js` | `loginUser` calls login + me endpoints; returns correct shape; propagates errors; `fetchMe` calls GET /me |
+| `services/__tests__/api.interceptors.test.js` | request adds Authorization when token set; no header when no token; does not overwrite existing header; 401 calls logout; non-401 errors not intercepted |
+| `components/__tests__/LoginPage.test.jsx` | renders email+password fields; submit calls loginUser; shows loading; shows error on failure; navigates to / on success |
+| `components/__tests__/ProtectedRoute.test.jsx` | renders children when token present; redirects to /login when no token |
