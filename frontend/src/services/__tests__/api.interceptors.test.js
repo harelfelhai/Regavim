@@ -19,7 +19,6 @@ const STUB_TOKEN = 'header.payload.sig';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Reset store state
   useAuthStore._state.token = null;
   useAuthStore._state.logoutCalled = false;
   useAuthStore.getState = () => useAuthStore._state;
@@ -30,15 +29,9 @@ beforeEach(() => {
 });
 
 describe('request interceptor', () => {
-  it('adds Authorization header when token is set', async () => {
+  it('adds Authorization header when token is set', () => {
     useAuthStore._state.token = STUB_TOKEN;
     const config = { headers: {} };
-    // Apply the request interceptor manually via the axios internals
-    // We test by making a real call with a mocked adapter
-    const adapter = vi.fn().mockResolvedValue({ data: 'ok', status: 200, headers: {}, config });
-    const instance = api.defaults;
-    // Instead of intercepting axios internals, test via a mock request
-    // We use the interceptor array directly (axios exposes it)
     const reqInterceptor = api.interceptors.request.handlers[0];
     const result = reqInterceptor.fulfilled(config);
     expect(result.headers.Authorization).toBe(`Bearer ${STUB_TOKEN}`);
@@ -75,8 +68,10 @@ describe('response interceptor', () => {
     await expect(resInterceptor.rejected(error)).rejects.toMatchObject({ isNetworkError: true });
   });
 
-  it('calls logout on 401 responses', async () => {
-    // Spy on window.location
+  it('calls logout on 401 when an auth token was present (session expired)', async () => {
+    // Simulate an authenticated session: token is in the store
+    useAuthStore._state.token = STUB_TOKEN;
+
     const originalLocation = window.location;
     delete window.location;
     window.location = { href: '' };
@@ -85,18 +80,33 @@ describe('response interceptor', () => {
     const resInterceptor = api.interceptors.response.handlers[0];
     await expect(resInterceptor.rejected(error)).rejects.toBeTruthy();
 
-    // Give async import a tick
     await new Promise((r) => setTimeout(r, 10));
     expect(useAuthStore._state.logoutCalled).toBe(true);
 
     window.location = originalLocation;
   });
 
+  it('does NOT call logout on 401 when no token is present (e.g. wrong login credentials)', async () => {
+    // Simulate an unauthenticated request (login form): no token in store
+    useAuthStore._state.token = null;
+    const logoutFn = vi.fn();
+    useAuthStore.getState().logout = logoutFn;
+
+    const error = { response: { status: 401 } };
+    const resInterceptor = api.interceptors.response.handlers[0];
+    await expect(resInterceptor.rejected(error)).rejects.toBeTruthy();
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(logoutFn).not.toHaveBeenCalled();
+  });
+
   it('does not call logout on non-401 errors', async () => {
-    useAuthStore.getState().logout = vi.fn();
+    useAuthStore._state.token = STUB_TOKEN;
+    const logoutFn = vi.fn();
+    useAuthStore.getState().logout = logoutFn;
     const error = { response: { status: 403 } };
     const resInterceptor = api.interceptors.response.handlers[0];
     await expect(resInterceptor.rejected(error)).rejects.toBeTruthy();
-    expect(useAuthStore.getState().logout).not.toHaveBeenCalled();
+    expect(logoutFn).not.toHaveBeenCalled();
   });
 });

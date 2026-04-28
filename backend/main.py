@@ -35,7 +35,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Restrict to specific origins in production
-    allow_credentials=True,
+    allow_credentials=False,  # JWT Bearer tokens don't use cookies; credentials flag not needed
     allow_methods=["*"],
     allow_headers=["*"],
 )

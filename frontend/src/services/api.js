@@ -1,8 +1,14 @@
 import axios from 'axios';
 import useAuthStore from '../store/authStore.js';
 
+// In development (and GitHub Codespaces), VITE_API_BASE_URL is unset and
+// baseURL defaults to '' so that requests go to /api/v1/... on the same host.
+// Vite's dev proxy then forwards those requests to http://localhost:8000 —
+// server-to-server, no CORS involved.
+// In production, set VITE_API_BASE_URL to the deployed API root
+// (e.g. https://api.regavim.org) and the proxy is bypassed.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   timeout: 10_000,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -26,10 +32,14 @@ api.interceptors.response.use(
       error.isNetworkError = true;
       error.message = 'Network error — the backend may be offline.';
     } else if (error.response.status === 401) {
-      // Token expired or revoked — log the user out and hard-redirect.
-      // Hard redirect discards all React state so no stale UI remains visible.
-      useAuthStore.getState().logout();
-      window.location.href = '/login';
+      // Only auto-logout when the failing request was authenticated.
+      // A 401 on an unauthenticated request (e.g. the login form with wrong
+      // credentials) must propagate normally so the caller can show an error.
+      const token = useAuthStore.getState().token;
+      if (token) {
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
