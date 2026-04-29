@@ -12,6 +12,21 @@ import {
 } from 'lucide-react';
 import { useReportForm, STEP } from '../hooks/useReportForm';
 
+// Must match MAX_IMAGE_BYTES in backend/services/image_service.py
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/tiff']);
+
+function validateFile(file) {
+  if (!ACCEPTED_TYPES.has(file.type)) {
+    return 'Unsupported format. Please upload a JPEG, PNG, or TIFF image.';
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    return `File is too large (${mb} MB). The maximum allowed size is 10 MB.`;
+  }
+  return null;
+}
+
 const CATEGORIES = [
   'ILLEGAL_CONSTRUCTION',
   'LAND_GRADING',
@@ -39,6 +54,9 @@ export default function ReportForm({ onClose, onSubmitted }) {
   // Pipeline-result fields
   const [description, setDescription] = useState('');
   const [finalCategory, setFinalCategory] = useState('');
+
+  // Client-side file validation error (cleared on next pick attempt)
+  const [fileError, setFileError] = useState(null);
 
   // Capture mode: 'camera' | 'gallery' | null
   const [captureMode, setCaptureMode] = useState(null);
@@ -97,6 +115,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
     cancelAndCleanup();
     setDescription('');
     setFinalCategory('');
+    setFileError(null);
     setCaptureMode(null);
     setPendingFile(null);
     setGpsCoords(null);
@@ -120,6 +139,9 @@ export default function ReportForm({ onClose, onSubmitted }) {
   function onCameraFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const validationError = validateFile(file);
+    if (validationError) { setFileError(validationError); return; }
+    setFileError(null);
     const lat = gpsCoords?.lat ?? null;
     const lng = gpsCoords?.lng ?? null;
     handleFileChange(file, {
@@ -141,6 +163,9 @@ export default function ReportForm({ onClose, onSubmitted }) {
   function onGalleryFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const validationError = validateFile(file);
+    if (validationError) { setFileError(validationError); return; }
+    setFileError(null);
     setPendingFile(file);
     // Reset Q&A so the user can re-answer if they re-pick
     setLocationChoice(null);
@@ -264,7 +289,17 @@ export default function ReportForm({ onClose, onSubmitted }) {
               <span className="text-xs text-gray-400">From device</span>
             </button>
           </div>
-          <p className="text-xs text-gray-400 text-center">JPEG · PNG · TIFF</p>
+          {fileError && (
+            <div
+              role="alert"
+              data-testid="file-error"
+              className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700"
+            >
+              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+              <span>{fileError}</span>
+            </div>
+          )}
+          <p className="text-xs text-gray-400 text-center">JPEG · PNG · TIFF · max 10 MB</p>
         </div>
       )}
 

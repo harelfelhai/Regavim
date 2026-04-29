@@ -24,7 +24,11 @@ export async function uploadImage(reportId, file) {
   const formData = new FormData();
   formData.append('report_id', reportId);
   formData.append('file', file);
-  const { data } = await api.post('/api/v1/images/upload', formData);
+  // Override the 10 s instance default: large images (up to 10 MB) need more
+  // time on slow connections. 60 s covers 10 MB at ~1.4 Mbps with headroom.
+  const { data } = await api.post('/api/v1/images/upload', formData, {
+    timeout: 60_000,
+  });
   return data;
 }
 

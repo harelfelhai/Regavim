@@ -34,9 +34,29 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (!error.response) {
+    // ECONNABORTED = Axios per-request timeout elapsed.
+    // ERR_CANCELED = request aborted via AbortController signal.
+    // Both produce no error.response, so they must be identified by error.code
+    // BEFORE the generic !error.response check — otherwise they are
+    // incorrectly reported as "backend offline".
+    const isTimeout =
+      error.code === 'ECONNABORTED' || error.code === 'ERR_CANCELED';
+
+    if (isTimeout) {
+      error.isTimeout = true;
+      error.message =
+        'The upload timed out — try a smaller image or check your connection.';
+    } else if (!error.response) {
+      // True connection failure: server unreachable, DNS failure, etc.
       error.isNetworkError = true;
       error.message = 'Network error — the backend may be offline.';
+    } else if (error.response.status === 413) {
+      // Server explicitly rejected the payload size.
+      // Use the backend's own detail message when available; fall back to a
+      // generic one so the user always sees an actionable explanation.
+      error.message =
+        error.response.data?.detail ??
+        'Image is too large. The maximum allowed size is 10 MB.';
     } else if (error.response.status === 401) {
       // Only auto-logout when the failing request was authenticated.
       // A 401 on an unauthenticated request (e.g. the login form with wrong

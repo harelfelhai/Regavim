@@ -291,6 +291,53 @@ describe('ReportForm — ready state', () => {
   });
 });
 
+// ── File validation ───────────────────────────────────────────────────────────
+
+describe('ReportForm — file validation', () => {
+  it('shows a file-error banner for an unsupported MIME type on the camera input', () => {
+    renderForm();
+    const gifFile = new File(['x'], 'anim.gif', { type: 'image/gif' });
+    const input = screen.getByTestId('camera-input');
+    fireEvent.change(input, { target: { files: [gifFile] } });
+    expect(screen.getByTestId('file-error')).toBeInTheDocument();
+    expect(screen.getByTestId('file-error')).toHaveTextContent(/unsupported format/i);
+  });
+
+  it('shows a file-error banner for a file over 10 MB on the camera input', () => {
+    renderForm();
+    const bigFile = new File(['x'.repeat(100)], 'big.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(bigFile, 'size', { value: 11 * 1024 * 1024 });
+    const input = screen.getByTestId('camera-input');
+    fireEvent.change(input, { target: { files: [bigFile] } });
+    expect(screen.getByTestId('file-error')).toHaveTextContent(/too large/i);
+    expect(screen.getByTestId('file-error')).toHaveTextContent(/10 MB/i);
+  });
+
+  it('does not show a file-error banner for a valid JPEG under 10 MB on the camera input', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange });
+    const input = screen.getByTestId('camera-input');
+    fireEvent.change(input, { target: { files: [mockFile] } });
+    expect(screen.queryByTestId('file-error')).not.toBeInTheDocument();
+  });
+
+  it('shows a file-error banner for an unsupported MIME type on the gallery input', () => {
+    renderForm();
+    const gifFile = new File(['x'], 'anim.gif', { type: 'image/gif' });
+    const input = screen.getByTestId('gallery-input');
+    fireEvent.change(input, { target: { files: [gifFile] } });
+    expect(screen.getByTestId('file-error')).toHaveTextContent(/unsupported format/i);
+  });
+
+  it('does not show Q&A panel after an invalid gallery file', () => {
+    renderForm();
+    const gifFile = new File(['x'], 'anim.gif', { type: 'image/gif' });
+    const input = screen.getByTestId('gallery-input');
+    fireEvent.change(input, { target: { files: [gifFile] } });
+    expect(screen.queryByText(/where was this photo taken/i)).not.toBeInTheDocument();
+  });
+});
+
 // ── Done state ────────────────────────────────────────────────────────────────
 
 describe('ReportForm — done state', () => {

@@ -84,6 +84,52 @@ describe('response interceptor', () => {
     await expect(resInterceptor.rejected(error)).rejects.toMatchObject({ isNetworkError: true });
   });
 
+  it('tags ECONNABORTED as isTimeout and does not tag it as isNetworkError', async () => {
+    const error = new Error('timeout of 60000ms exceeded');
+    error.code = 'ECONNABORTED';
+    error.response = undefined;
+    const resInterceptor = api.interceptors.response.handlers[0];
+    const rejected = resInterceptor.rejected(error);
+    await expect(rejected).rejects.toMatchObject({ isTimeout: true });
+    await expect(rejected).rejects.not.toMatchObject({ isNetworkError: true });
+  });
+
+  it('sets a "timed out" message on ECONNABORTED', async () => {
+    const error = new Error('timeout');
+    error.code = 'ECONNABORTED';
+    error.response = undefined;
+    const resInterceptor = api.interceptors.response.handlers[0];
+    await expect(resInterceptor.rejected(error)).rejects.toMatchObject({
+      message: expect.stringContaining('timed out'),
+    });
+  });
+
+  it('tags ERR_CANCELED as isTimeout', async () => {
+    const error = new Error('canceled');
+    error.code = 'ERR_CANCELED';
+    error.response = undefined;
+    const resInterceptor = api.interceptors.response.handlers[0];
+    await expect(resInterceptor.rejected(error)).rejects.toMatchObject({ isTimeout: true });
+  });
+
+  it('uses the server detail message on 413', async () => {
+    const error = new Error('Request Entity Too Large');
+    error.response = { status: 413, data: { detail: 'File exceeds 10 MB server limit.' } };
+    const resInterceptor = api.interceptors.response.handlers[0];
+    await expect(resInterceptor.rejected(error)).rejects.toMatchObject({
+      message: 'File exceeds 10 MB server limit.',
+    });
+  });
+
+  it('uses a fallback message on 413 when server sends no detail', async () => {
+    const error = new Error('Request Entity Too Large');
+    error.response = { status: 413, data: {} };
+    const resInterceptor = api.interceptors.response.handlers[0];
+    await expect(resInterceptor.rejected(error)).rejects.toMatchObject({
+      message: expect.stringContaining('10 MB'),
+    });
+  });
+
   it('calls logout on 401 when an auth token was present (session expired)', async () => {
     // Simulate an authenticated session: token is in the store
     useAuthStore._state.token = STUB_TOKEN;
