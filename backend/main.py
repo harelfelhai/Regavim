@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import backend.models  # noqa: F401 — registers all ORM models with SQLAlchemy metadata
 from backend.api.v1 import auth, images, reports
+from backend.core.config import settings
 from backend.db.base import Base
 from backend.db.session import engine
 
@@ -32,9 +33,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_origins = (
+    ["*"]
+    if settings.ALLOWED_ORIGINS.strip() == "*"
+    else [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to specific origins in production
+    allow_origins=_origins,
     allow_credentials=False,  # JWT Bearer tokens don't use cookies; credentials flag not needed
     allow_methods=["*"],
     allow_headers=["*"],

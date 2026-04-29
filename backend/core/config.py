@@ -35,5 +35,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-before-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
 
+    # CORS — comma-separated list of allowed origins, or "*" to allow all.
+    # In production, set to the exact frontend URL, e.g.:
+    #   ALLOWED_ORIGINS=https://regavim.vercel.app
+    ALLOWED_ORIGINS: str = "*"
+
 
 settings = Settings()
