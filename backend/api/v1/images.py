@@ -28,7 +28,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user
@@ -45,7 +45,11 @@ from backend.services.image_service import (
     validate_image_format,
     validate_image_size,
 )
-from backend.services.storage import LocalStorageProvider, StorageProvider
+from backend.services.storage import (
+    CloudinaryStorageProvider,
+    LocalStorageProvider,
+    StorageProvider,
+)
 
 router = APIRouter()
 
@@ -67,8 +71,16 @@ def get_storage() -> StorageProvider:
     """
     FastAPI dependency that supplies the active storage backend.
     Override this in tests (via app.dependency_overrides) to use a temp dir.
-    Swap the return value here to switch to S3 in production.
+
+    Cloudinary is activated when all three CLOUDINARY_* env vars are set.
+    Falls back to local disk storage for development and CI.
     """
+    if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET:
+        return CloudinaryStorageProvider(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
+        )
     return LocalStorageProvider(Path(settings.UPLOAD_DIR))
 
 
@@ -130,6 +142,7 @@ async def upload_image(
 async def analyze_image(
     image_id: str = Form(...),
     db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage),
     current_user: User = Depends(get_current_user),
 ) -> AnalysisResult:
     """
@@ -144,15 +157,18 @@ async def analyze_image(
     if not image:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
 
-    file_path = Path(image.file_path)
-    if not file_path.exists():
+    try:
+        file_bytes = storage.read(image.file_path)
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image file not found on disk.",
+            detail="Image file not found.",
         )
 
-    file_bytes = file_path.read_bytes()
-    media_type = _EXT_TO_MEDIA_TYPE.get(file_path.suffix.lower(), "image/jpeg")
+    # Derive media type from the original filename (works for both local and cloud paths).
+    media_type = _EXT_TO_MEDIA_TYPE.get(
+        Path(image.original_filename).suffix.lower(), "image/jpeg"
+    )
 
     suggested_category = analyze_image_with_claude(file_bytes, media_type)
 
@@ -187,19 +203,30 @@ def get_image_metadata(
 def get_image_file(
     image_id: str,
     db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage),
     current_user: User = Depends(get_current_user),
-) -> FileResponse:
-    """Serve the original image binary (EXIF intact) for display in the browser."""
+):
+    """
+    Serve the original image binary (EXIF intact) for display in the browser.
+
+    When Cloudinary is active, issues a 302 redirect to the CDN URL so the
+    binary is streamed directly from the CDN rather than proxied through
+    the backend. Local dev falls back to a FileResponse.
+    """
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
 
+    cdn_url = storage.public_url(image.file_path)
+    if cdn_url:
+        return RedirectResponse(url=cdn_url, status_code=302)
+
+    # Local storage fallback — serve directly through the backend.
     file_path = Path(image.file_path)
     if not file_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Image file not found on disk.",
         )
-
     media_type = _EXT_TO_MEDIA_TYPE.get(file_path.suffix.lower(), "application/octet-stream")
     return FileResponse(path=file_path, media_type=media_type)

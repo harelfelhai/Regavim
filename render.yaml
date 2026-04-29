@@ -28,6 +28,15 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
 
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+
+      - key: CLOUDINARY_API_KEY
+        sync: false
+
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
       # ── Auto-generated on first deploy ────────────────────────────────────────
       - key: SECRET_KEY
         generateValue: true  # Render generates a random 32-byte hex string

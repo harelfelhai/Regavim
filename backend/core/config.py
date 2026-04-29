@@ -40,5 +40,12 @@ class Settings(BaseSettings):
     #   ALLOWED_ORIGINS=https://regavim.vercel.app
     ALLOWED_ORIGINS: str = "*"
 
+    # Cloudinary — leave blank to use local disk storage (development).
+    # When all three are set, CloudinaryStorageProvider is activated automatically.
+    # Obtain from: https://console.cloudinary.com → Settings → API Keys
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
 
 settings = Settings()
