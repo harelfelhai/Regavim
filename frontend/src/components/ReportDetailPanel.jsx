@@ -6,6 +6,8 @@ import {
   MapPin,
   Sparkles,
   CheckCircle2,
+  Trash2,
+  Clock,
 } from 'lucide-react';
 import { useReportDetail } from '../hooks/useReportDetail';
 import { getImageFileUrl } from '../services/images';
@@ -21,20 +23,31 @@ const CATEGORIES = [
 ];
 
 const STATUS_BADGE = {
-  pending:   'bg-amber-100 text-amber-700',
-  confirmed: 'bg-blue-100 text-blue-700',
-  approved:  'bg-green-100 text-green-700',
-  rejected:  'bg-gray-100 text-gray-500',
+  pending:            'bg-amber-100 text-amber-700',
+  confirmed:          'bg-blue-100 text-blue-700',
+  approved:           'bg-green-100 text-green-700',
+  rejected:           'bg-gray-100 text-gray-500',
+  deletion_requested: 'bg-red-100 text-red-600',
 };
 
+// Statuses where the coordinator category form is still shown.
 const EDITABLE_STATUSES = new Set(['pending', 'confirmed']);
+
+// Statuses where requesting deletion is not allowed.
+const NON_DELETABLE_STATUSES = new Set(['approved', 'rejected', 'deletion_requested']);
 
 function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
+}
+
+function formatDateTime(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
   });
 }
 
@@ -42,16 +55,30 @@ function formatCategory(cat) {
   return cat ? cat.replace(/_/g, ' ') : '—';
 }
 
-export default function ReportDetailPanel({ reportId, onBack, onPatched }) {
-  const [confirmValue, setConfirmValue] = useState('');
+function formatStatus(s) {
+  return s.replace(/_/g, ' ');
+}
 
-  // Reset local category selection when the selected report changes.
+/**
+ * @param {string}  reportId
+ * @param {Function} onBack
+ * @param {Function} onPatched
+ * @param {Object|null} currentUser  - { id, role } from the auth store
+ */
+export default function ReportDetailPanel({ reportId, onBack, onPatched, currentUser }) {
+  const [confirmValue, setConfirmValue] = useState('');
+  const [deletionConfirmed, setDeletionConfirmed] = useState(false);
+
   useEffect(() => {
     setConfirmValue('');
+    setDeletionConfirmed(false);
   }, [reportId]);
 
-  const { report, loading, error, patching, patchError, confirmCategory } =
-    useReportDetail(reportId, { onPatched });
+  const {
+    report, loading, error,
+    patching, patchError,
+    confirmCategory, requestDeletion,
+  } = useReportDetail(reportId, { onPatched });
 
   if (loading) {
     return (
@@ -78,11 +105,26 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched }) {
   const firstImageId = report.image_ids?.[0];
   const displayCategory = confirmValue || report.final_category || report.ai_category || '';
 
+  // Deletion request: visible to report owner and admins for non-terminal statuses.
+  const canRequestDeletion =
+    currentUser &&
+    !NON_DELETABLE_STATUSES.has(report.status) &&
+    (currentUser.id === report.user_id || currentUser.role === 'admin');
+
   async function handleConfirm(e) {
     e.preventDefault();
     if (!displayCategory) return;
     const ok = await confirmCategory(displayCategory);
     if (ok) setConfirmValue('');
+  }
+
+  async function handleRequestDeletion() {
+    if (!deletionConfirmed) {
+      setDeletionConfirmed(true);
+      return;
+    }
+    await requestDeletion();
+    setDeletionConfirmed(false);
   }
 
   return (
@@ -98,7 +140,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched }) {
           Back
         </button>
         <span className={`text-xs rounded-full px-2.5 py-0.5 font-medium capitalize ${badgeClass}`}>
-          {report.status}
+          {formatStatus(report.status)}
         </span>
       </div>
 
@@ -120,6 +162,13 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched }) {
           <p className="text-xs text-gray-400 mb-0.5">Date reported</p>
           <p className="text-sm text-gray-800">{formatDate(report.created_at)}</p>
         </div>
+
+        {report.observed_at && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Clock size={12} className="text-regavim-blue flex-shrink-0" />
+            <span>Observed: <span className="text-gray-700">{formatDateTime(report.observed_at)}</span></span>
+          </div>
+        )}
 
         {report.description && (
           <div>
@@ -213,6 +262,43 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched }) {
               <span className="font-medium">{formatCategory(report.final_category)}</span>
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Deletion request — owner or admin only */}
+      {canRequestDeletion && (
+        <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0 space-y-2">
+          {deletionConfirmed && (
+            <p className="text-xs text-red-600" data-testid="deletion-confirm-prompt">
+              Are you sure? This will flag the report for admin review.
+            </p>
+          )}
+          {patchError && !canConfirm && (
+            <p role="alert" className="text-xs text-red-600">{patchError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleRequestDeletion}
+            disabled={patching}
+            data-testid="request-deletion-btn"
+            className={`w-full flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              deletionConfirmed
+                ? 'border-red-400 bg-red-50 text-red-600 hover:bg-red-100'
+                : 'border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-500'
+            }`}
+          >
+            <Trash2 size={14} />
+            {deletionConfirmed ? 'Confirm deletion request' : 'Request deletion'}
+          </button>
+          {deletionConfirmed && (
+            <button
+              type="button"
+              onClick={() => setDeletionConfirmed(false)}
+              className="w-full text-xs text-gray-400 hover:text-gray-600"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       )}
     </div>

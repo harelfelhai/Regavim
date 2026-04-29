@@ -85,6 +85,7 @@ export default function MapDashboard() {
               reportId={selectedReportId}
               onBack={clearSelection}
               onPatched={refresh}
+              currentUser={user}
             />
           ) : (
             <>

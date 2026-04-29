@@ -22,6 +22,7 @@ class ReportStatus(str, Enum):
     CONFIRMED = "confirmed"
     APPROVED = "approved"
     REJECTED = "rejected"
+    DELETION_REQUESTED = "deletion_requested"
 
 
 class UserRole(str, Enum):

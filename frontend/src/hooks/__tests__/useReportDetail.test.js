@@ -15,6 +15,7 @@ const MOCK_REPORT = {
   final_category: null,
   description: 'Test',
   image_ids: [],
+  user_id: 'user-1',
 };
 
 describe('useReportDetail — initial state', () => {
@@ -131,5 +132,61 @@ describe('useReportDetail — confirmCategory', () => {
     expect(result.current.patching).toBe(true);
     await act(async () => { resolvePatch({ ...MOCK_REPORT, final_category: 'DEMOLITION' }); });
     expect(result.current.patching).toBe(false);
+  });
+});
+
+describe('useReportDetail — requestDeletion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchReport.mockResolvedValue(MOCK_REPORT);
+    patchReport.mockResolvedValue({ ...MOCK_REPORT, status: 'deletion_requested' });
+  });
+
+  it('calls patchReport with status=deletion_requested', async () => {
+    const { result } = renderHook(() => useReportDetail('r-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.requestDeletion());
+    expect(patchReport).toHaveBeenCalledWith('r-1', { status: 'deletion_requested' });
+  });
+
+  it('updates report status to deletion_requested on success', async () => {
+    const { result } = renderHook(() => useReportDetail('r-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.requestDeletion());
+    expect(result.current.report.status).toBe('deletion_requested');
+  });
+
+  it('calls onPatched callback on success', async () => {
+    const onPatched = vi.fn();
+    const { result } = renderHook(() => useReportDetail('r-1', { onPatched }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.requestDeletion());
+    expect(onPatched).toHaveBeenCalled();
+  });
+
+  it('returns true on success', async () => {
+    const { result } = renderHook(() => useReportDetail('r-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let ok;
+    await act(async () => { ok = await result.current.requestDeletion(); });
+    expect(ok).toBe(true);
+  });
+
+  it('sets patchError and returns false on failure', async () => {
+    patchReport.mockRejectedValue(new Error('Request failed'));
+    const { result } = renderHook(() => useReportDetail('r-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let ok;
+    await act(async () => { ok = await result.current.requestDeletion(); });
+    expect(ok).toBe(false);
+    expect(result.current.patchError).toBe('Request failed');
+  });
+
+  it('returns false immediately when reportId is null', async () => {
+    const { result } = renderHook(() => useReportDetail(null));
+    let ok;
+    await act(async () => { ok = await result.current.requestDeletion(); });
+    expect(ok).toBe(false);
+    expect(patchReport).not.toHaveBeenCalled();
   });
 });

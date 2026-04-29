@@ -54,5 +54,23 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
-  return { report, loading, error, patching, patchError, confirmCategory };
+  async function requestDeletion() {
+    if (!reportId) return false;
+    setPatching(true);
+    setPatchError(null);
+
+    try {
+      const updated = await patchReport(reportId, { status: 'deletion_requested' });
+      setReport(updated);
+      onPatched?.();
+      return true;
+    } catch (err) {
+      setPatchError(err?.message ?? 'Request failed. Please try again.');
+      return false;
+    } finally {
+      setPatching(false);
+    }
+  }
+
+  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion };
 }

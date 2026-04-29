@@ -57,6 +57,13 @@ class Report(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
 
+    # When the incident was observed/photographed (may differ from created_at).
+    # Set by the frontend at creation time — not auto-generated.
+    # Existing rows: NULL (apply: ALTER TABLE reports ADD COLUMN observed_at DATETIME)
+    observed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     user_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     user_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_lat: Mapped[float | None] = mapped_column(Float, nullable=True)

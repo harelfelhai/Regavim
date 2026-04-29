@@ -1,6 +1,6 @@
 import { Filter } from 'lucide-react';
 
-const STATUSES = ['pending', 'confirmed', 'approved', 'rejected'];
+const STATUSES = ['pending', 'confirmed', 'approved', 'rejected', 'deletion_requested'];
 
 export default function FilterBar({ filters, onChange }) {
   function set(key, value) {
@@ -37,7 +37,7 @@ export default function FilterBar({ filters, onChange }) {
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s.charAt(0).toUpperCase() + s.slice(1)}
+              {s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </option>
           ))}
         </select>

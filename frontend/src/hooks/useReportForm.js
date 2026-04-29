@@ -20,8 +20,8 @@ export const STEP = {
  *        → submitting (PATCH report with description + final_category)
  *        → done
  *
- * URL.createObjectURL produces a local blob URL for instant preview.
- * The object URL is revoked on cleanup to avoid memory leaks.
+ * handleFileChange accepts an optional `meta` object from the form component
+ * containing GPS coordinates and observed_at captured before the upload starts.
  */
 export function useReportForm() {
   const [step, setStep]               = useState(STEP.IDLE);
@@ -39,28 +39,46 @@ export function useReportForm() {
   }, [imagePreview]);
 
   /**
-   * Called as soon as the user picks a file.
-   * Creates the preview and kicks off the upload → analyze pipeline.
+   * Called once the user has chosen a file AND (for gallery mode) answered the
+   * location/time questions. `meta` carries coordinates and observed_at so they
+   * are stored on the record at creation time.
+   *
+   * @param {File}   file
+   * @param {Object} meta - { userLat, userLng, targetLat, targetLng, observedAt }
    */
-  async function handleFileChange(file) {
+  async function handleFileChange(file, meta = {}) {
+    const {
+      userLat    = null,
+      userLng    = null,
+      targetLat  = null,
+      targetLng  = null,
+      observedAt = null,
+    } = meta;
+
     setImagePreview(URL.createObjectURL(file));
     setStep(STEP.UPLOADING);
     setError(null);
     setAiCategory(null);
 
-    // Local variable so the catch block can reference it even before setReportId settles.
+    // Local var so the catch block references it even before setReportId settles.
     let createdReportId = null;
 
     try {
-      // Step 1 — create an empty draft report to get a report_id.
-      const report = await createReport({});
+      // Build only the fields that have values so createReport({}) still works
+      // for the no-meta case (backward-compatible with existing tests).
+      const createPayload = {};
+      if (userLat    !== null) createPayload.user_lat    = userLat;
+      if (userLng    !== null) createPayload.user_lng    = userLng;
+      if (targetLat  !== null) createPayload.target_lat  = targetLat;
+      if (targetLng  !== null) createPayload.target_lng  = targetLng;
+      if (observedAt !== null) createPayload.observed_at = observedAt;
+
+      const report = await createReport(createPayload);
       createdReportId = report.id;
       setReportId(report.id);
 
-      // Step 2 — upload the image to that report.
       const image = await uploadImage(report.id, file);
 
-      // Step 3 — send the stored image to Claude for classification.
       setStep(STEP.ANALYZING);
       const analysis = await analyzeImage(image.id);
 
@@ -70,8 +88,7 @@ export function useReportForm() {
     } catch (err) {
       setError(err?.message ?? 'Upload failed. Please try again.');
       setStep(STEP.ERROR);
-      // Best-effort cleanup: hard-delete the draft (no images) or soft-delete
-      // if an image was already attached before the failure.
+      // Best-effort cleanup: hard-delete if no image attached yet, else soft-delete.
       if (createdReportId) {
         deleteReport(createdReportId, { force: true }).catch(() => {
           deleteReport(createdReportId).catch(() => {});
@@ -82,7 +99,6 @@ export function useReportForm() {
 
   /**
    * Finalises the report with the coordinator's description and chosen category.
-   * Sets status → confirmed via the backend auto-confirm rule.
    */
   async function handleSubmit({ description, finalCategory }) {
     if (!reportId) return;
@@ -110,12 +126,11 @@ export function useReportForm() {
   }
 
   /**
-   * Cancel the current flow and clean up any draft record that was already
-   * created on the server. Hard-deletes if no image is attached yet; falls
-   * back to soft-delete (rejected) otherwise. Both are best-effort.
+   * Cancel the flow and clean up any draft record on the server.
+   * Hard-deletes if no image is attached yet; falls back to soft-delete.
    */
   function cancelAndCleanup() {
-    const currentId = reportId; // capture before reset() clears it
+    const currentId = reportId;
     reset();
     if (currentId) {
       deleteReport(currentId, { force: true }).catch(() => {

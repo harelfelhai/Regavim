@@ -7,6 +7,7 @@ create_report uses current_user.id instead of the former placeholder constant.
 Lifecycle transitions:
   POST /         → status = pending
   PATCH /{id}    → coordinator sets final_category → auto-advances to confirmed
+  PATCH /{id}    → coordinator/admin sets status = deletion_requested
   DELETE /{id}   → soft-delete (status = rejected; row retained for audit)
   PATCH /{id}    → manager approval (status = approved, Stage 7+)
 """
@@ -110,6 +111,19 @@ def update_report(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
 
     updates = payload.model_dump(exclude_unset=True)
+
+    # Prevent requesting deletion for reports that are already in a terminal state.
+    incoming_status = updates.get("status")
+    incoming_status_value = incoming_status.value if hasattr(incoming_status, "value") else incoming_status
+    if incoming_status_value == ReportStatus.DELETION_REQUESTED.value and report.status in (
+        ReportStatus.APPROVED.value,
+        ReportStatus.REJECTED.value,
+        ReportStatus.DELETION_REQUESTED.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot request deletion for a report that is already approved, rejected, or pending deletion.",
+        )
 
     # Auto-confirm: pending → confirmed when coordinator sets final_category.
     if (

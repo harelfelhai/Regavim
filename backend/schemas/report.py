@@ -20,6 +20,7 @@ class ReportCreate(BaseModel):
     """Payload for POST /api/v1/reports/."""
 
     description: Optional[str] = None
+    observed_at: Optional[datetime] = None
     user_lat: Optional[float] = None
     user_lng: Optional[float] = None
     target_lat: Optional[float] = None
@@ -63,6 +64,7 @@ class ReportRead(BaseModel):
     id: str
     created_at: datetime
     updated_at: datetime
+    observed_at: Optional[datetime] = None
     status: ReportStatus
     ai_category: Optional[str] = None
     final_category: Optional[str] = None

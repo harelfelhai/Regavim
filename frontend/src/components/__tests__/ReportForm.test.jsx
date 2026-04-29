@@ -5,6 +5,16 @@ import { useReportForm, STEP } from '../../hooks/useReportForm';
 
 vi.mock('../../hooks/useReportForm');
 
+// Mock navigator.geolocation for all tests (GPS is a browser API not in jsdom)
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(global.navigator, 'geolocation', {
+    value: { getCurrentPosition: vi.fn() },
+    configurable: true,
+    writable: true,
+  });
+});
+
 const defaultHook = {
   step: STEP.IDLE,
   imagePreview: null,
@@ -23,28 +33,155 @@ function renderForm(hookOverrides = {}, props = {}) {
   );
 }
 
-describe('ReportForm — idle state', () => {
-  it('renders the upload dropzone when no preview', () => {
+const mockFile = new File(['x'], 'photo.jpg', { type: 'image/jpeg' });
+
+// ── Mode selector ─────────────────────────────────────────────────────────────
+
+describe('ReportForm — mode selector (idle state)', () => {
+  it('renders Take Photo and Choose Photo buttons', () => {
     renderForm();
-    expect(screen.getByLabelText('Click to upload image')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /take photo/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /choose from gallery/i })).toBeInTheDocument();
   });
 
   it('renders the form header', () => {
     renderForm();
     expect(screen.getByText('New Report')).toBeInTheDocument();
   });
-});
 
-describe('ReportForm — file input', () => {
-  it('calls handleFileChange when a file is selected', () => {
-    const handleFileChange = vi.fn();
-    renderForm({ handleFileChange });
-    const input = screen.getByTestId('file-input');
-    const file = new File(['x'], 'photo.jpg', { type: 'image/jpeg' });
-    fireEvent.change(input, { target: { files: [file] } });
-    expect(handleFileChange).toHaveBeenCalledWith(file);
+  it('does not show the upload dropzone', () => {
+    renderForm();
+    expect(screen.queryByText(/drop image here/i)).not.toBeInTheDocument();
   });
 });
+
+// ── Hidden file inputs ────────────────────────────────────────────────────────
+
+describe('ReportForm — camera input', () => {
+  it('calls handleFileChange with observedAt when camera file is selected', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange });
+    const input = screen.getByTestId('camera-input');
+    fireEvent.change(input, { target: { files: [mockFile] } });
+    expect(handleFileChange).toHaveBeenCalledWith(
+      mockFile,
+      expect.objectContaining({ observedAt: expect.any(String) }),
+    );
+  });
+
+  it('does not call handleFileChange when no file is selected on camera input', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange });
+    const input = screen.getByTestId('camera-input');
+    fireEvent.change(input, { target: { files: [] } });
+    expect(handleFileChange).not.toHaveBeenCalled();
+  });
+});
+
+// ── Gallery metadata Q&A ──────────────────────────────────────────────────────
+
+describe('ReportForm — gallery metadata Q&A', () => {
+  function selectGalleryFile() {
+    const input = screen.getByTestId('gallery-input');
+    fireEvent.change(input, { target: { files: [mockFile] } });
+  }
+
+  it('shows Q&A panel after gallery file is selected', () => {
+    renderForm();
+    selectGalleryFile();
+    expect(screen.getByText(/where was this photo taken/i)).toBeInTheDocument();
+    expect(screen.getByText(/when was this photo taken/i)).toBeInTheDocument();
+  });
+
+  it('shows the selected file name', () => {
+    renderForm();
+    selectGalleryFile();
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+  });
+
+  it('Continue button is disabled until both questions answered', () => {
+    renderForm();
+    selectGalleryFile();
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+  });
+
+  it('Continue button enables after both questions answered', () => {
+    renderForm();
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/i'm at the location right now/i));
+    fireEvent.click(screen.getByLabelText(/today/i));
+    expect(screen.getByRole('button', { name: /continue/i })).not.toBeDisabled();
+  });
+
+  it('shows manual coordinate inputs when "somewhere else" is selected', () => {
+    renderForm();
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/somewhere else/i));
+    expect(screen.getByLabelText(/target latitude/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/target longitude/i)).toBeInTheDocument();
+  });
+
+  it('Continue stays disabled when manual selected but coords empty', () => {
+    renderForm();
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/somewhere else/i));
+    fireEvent.click(screen.getByLabelText(/today/i));
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+  });
+
+  it('Continue enables when manual coords are filled', () => {
+    renderForm();
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/somewhere else/i));
+    fireEvent.click(screen.getByLabelText(/today/i));
+    fireEvent.change(screen.getByLabelText(/target latitude/i), { target: { value: '31.5' } });
+    fireEvent.change(screen.getByLabelText(/target longitude/i), { target: { value: '35.0' } });
+    expect(screen.getByRole('button', { name: /continue/i })).not.toBeDisabled();
+  });
+
+  it('shows datetime picker when "another date" is selected', () => {
+    renderForm();
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/another date/i));
+    expect(screen.getByLabelText(/observation date and time/i)).toBeInTheDocument();
+  });
+
+  it('calls handleFileChange with today timestamp when time=today', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange });
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/i'm at the location right now/i));
+    fireEvent.click(screen.getByLabelText(/today/i));
+    fireEvent.submit(screen.getByRole('button', { name: /continue/i }).closest('form'));
+    expect(handleFileChange).toHaveBeenCalledWith(
+      mockFile,
+      expect.objectContaining({ observedAt: expect.any(String) }),
+    );
+  });
+
+  it('calls handleFileChange with null observedAt when custom date not filled', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange });
+    selectGalleryFile();
+    fireEvent.click(screen.getByLabelText(/i'm at the location right now/i));
+    fireEvent.click(screen.getByLabelText(/another date/i));
+    // don't fill datetime-local
+    fireEvent.submit(screen.getByRole('button', { name: /continue/i }).closest('form'));
+    expect(handleFileChange).toHaveBeenCalledWith(
+      mockFile,
+      expect.objectContaining({ observedAt: null }),
+    );
+  });
+
+  it('Back button returns to mode selector', () => {
+    renderForm();
+    selectGalleryFile();
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(screen.getByRole('button', { name: /take photo/i })).toBeInTheDocument();
+  });
+});
+
+// ── Busy overlay ──────────────────────────────────────────────────────────────
 
 describe('ReportForm — busy overlay', () => {
   it('shows uploading label during UPLOADING step', () => {
@@ -68,6 +205,8 @@ describe('ReportForm — busy overlay', () => {
   });
 });
 
+// ── Error state ───────────────────────────────────────────────────────────────
+
 describe('ReportForm — error state', () => {
   it('shows the error message', () => {
     renderForm({ step: STEP.ERROR, error: 'Upload failed. Please try again.' });
@@ -82,6 +221,8 @@ describe('ReportForm — error state', () => {
   });
 });
 
+// ── Close button ──────────────────────────────────────────────────────────────
+
 describe('ReportForm — close button', () => {
   it('calls cancelAndCleanup and onClose when X is clicked', () => {
     const cancelAndCleanup = vi.fn();
@@ -92,6 +233,8 @@ describe('ReportForm — close button', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+// ── Ready state ───────────────────────────────────────────────────────────────
 
 describe('ReportForm — ready state', () => {
   const readyHook = {
@@ -147,6 +290,8 @@ describe('ReportForm — ready state', () => {
     expect(screen.getByText('AI unavailable — please classify')).toBeInTheDocument();
   });
 });
+
+// ── Done state ────────────────────────────────────────────────────────────────
 
 describe('ReportForm — done state', () => {
   it('shows the success message', () => {
