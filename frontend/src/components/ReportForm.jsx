@@ -14,17 +14,44 @@ import { useReportForm, STEP } from '../hooks/useReportForm';
 
 // Must match MAX_IMAGE_BYTES in backend/services/image_service.py
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_DIMENSION = 2048; // Longest side after auto-compression
 const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/tiff']);
 
-function validateFile(file) {
+function validateFileType(file) {
   if (!ACCEPTED_TYPES.has(file.type)) {
     return 'Unsupported format. Please upload a JPEG, PNG, or TIFF image.';
   }
-  if (file.size > MAX_FILE_BYTES) {
-    const mb = (file.size / 1024 / 1024).toFixed(1);
-    return `File is too large (${mb} MB). The maximum allowed size is 10 MB.`;
-  }
   return null;
+}
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
+// Auto-compress oversize images on-device so users never see "file too large".
+async function compressIfNeeded(file) {
+  if (file.size <= MAX_FILE_BYTES) return file;
+  const img = await loadImage(file);
+  const scale = Math.min(1, MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth  * scale);
+  const h = Math.round(img.naturalHeight * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+  for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+    if (blob && blob.size <= MAX_FILE_BYTES) {
+      return new File([blob], newName, { type: 'image/jpeg' });
+    }
+  }
+  throw new Error('Image could not be compressed below 10 MB.');
 }
 
 const CATEGORIES = [
@@ -57,6 +84,9 @@ export default function ReportForm({ onClose, onSubmitted }) {
 
   // Client-side file validation error (cleared on next pick attempt)
   const [fileError, setFileError] = useState(null);
+
+  // True while a freshly-picked oversize image is being downscaled in-browser.
+  const [isCompressing, setIsCompressing] = useState(false);
 
   // Capture mode: 'camera' | 'gallery' | null
   const [captureMode, setCaptureMode] = useState(null);
@@ -116,6 +146,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
     setDescription('');
     setFinalCategory('');
     setFileError(null);
+    setIsCompressing(false);
     setCaptureMode(null);
     setPendingFile(null);
     setGpsCoords(null);
@@ -136,12 +167,20 @@ export default function ReportForm({ onClose, onSubmitted }) {
     cameraInputRef.current?.click();
   }
 
-  function onCameraFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validationError = validateFile(file);
-    if (validationError) { setFileError(validationError); return; }
+  async function onCameraFileChange(e) {
+    const raw = e.target.files?.[0];
+    if (!raw) return;
+    const typeError = validateFileType(raw);
+    if (typeError) { setFileError(typeError); return; }
     setFileError(null);
+
+    let file = raw;
+    if (raw.size > MAX_FILE_BYTES) {
+      setIsCompressing(true);
+      try { file = await compressIfNeeded(raw); }
+      catch { setFileError('Could not process this image — please try another.'); setIsCompressing(false); return; }
+      setIsCompressing(false);
+    }
 
     if (gpsStatus === 'ready') {
       handleFileChange(file, {
@@ -184,12 +223,21 @@ export default function ReportForm({ onClose, onSubmitted }) {
     galleryInputRef.current?.click();
   }
 
-  function onGalleryFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validationError = validateFile(file);
-    if (validationError) { setFileError(validationError); return; }
+  async function onGalleryFileChange(e) {
+    const raw = e.target.files?.[0];
+    if (!raw) return;
+    const typeError = validateFileType(raw);
+    if (typeError) { setFileError(typeError); return; }
     setFileError(null);
+
+    let file = raw;
+    if (raw.size > MAX_FILE_BYTES) {
+      setIsCompressing(true);
+      try { file = await compressIfNeeded(raw); }
+      catch { setFileError('Could not process this image — please try another.'); setIsCompressing(false); return; }
+      setIsCompressing(false);
+    }
+
     setPendingFile(file);
     // Reset Q&A so the user can re-answer if they re-pick
     setLocationChoice(null);
@@ -222,7 +270,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
     locationChoice !== null &&
     timeChoice !== null &&
     (locationChoice !== 'manual' || (manualLat.trim() && manualLng.trim())) &&
-    !(locationChoice === 'here' && gpsStatus === 'loading');
+    !(locationChoice === 'here' && (gpsStatus === 'loading' || gpsStatus === 'error'));
 
   // ── Submit pipeline result ───────────────────────────────────────────────────
   async function onSubmit(e) {
@@ -323,7 +371,17 @@ export default function ReportForm({ onClose, onSubmitted }) {
               <span>{fileError}</span>
             </div>
           )}
-          <p className="text-xs text-gray-400 text-center">JPEG · PNG · TIFF · max 10 MB</p>
+          {isCompressing && (
+            <div
+              role="status"
+              data-testid="compressing-indicator"
+              className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-regavim-blue"
+            >
+              <Loader2 size={14} className="animate-spin flex-shrink-0" />
+              <span>Image is large — compressing for upload…</span>
+            </div>
+          )}
+          <p className="text-xs text-gray-400 text-center">JPEG · PNG · TIFF · larger images are auto-compressed</p>
         </div>
       )}
 
