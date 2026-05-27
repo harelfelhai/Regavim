@@ -5,6 +5,32 @@ import { useReportForm, STEP } from '../../hooks/useReportForm';
 
 vi.mock('../../hooks/useReportForm');
 
+// Stub LocationPicker so tests don't pull in Leaflet (which needs a real DOM).
+// Exposes a button that fires onChange with a fixed pin coord.
+vi.mock('../LocationPicker', () => ({
+  default: ({ onChange, initialPin }) => (
+    <div data-testid="location-picker-stub">
+      <button
+        type="button"
+        data-testid="stub-set-pin"
+        onClick={() => onChange({ lat: 31.5, lng: 35.0 })}
+      >
+        Set Pin
+      </button>
+      <button
+        type="button"
+        data-testid="stub-clear-pin"
+        onClick={() => onChange(null)}
+      >
+        Clear Pin
+      </button>
+      <span data-testid="stub-initial-pin">
+        {initialPin ? `${initialPin.lat},${initialPin.lng}` : 'none'}
+      </span>
+    </div>
+  ),
+}));
+
 // Mock navigator.geolocation for all tests (GPS is a browser API not in jsdom)
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,39 +74,48 @@ describe('ReportForm — mode selector (idle state)', () => {
     renderForm();
     expect(screen.getByText('דיווח חדש')).toBeInTheDocument();
   });
-
-  it('does not show the upload dropzone', () => {
-    renderForm();
-    expect(screen.queryByText(/drop image here/i)).not.toBeInTheDocument();
-  });
 });
 
-// ── Hidden file inputs ────────────────────────────────────────────────────────
+// ── Camera flow ───────────────────────────────────────────────────────────────
 
-describe('ReportForm — camera input', () => {
-  it('calls handleFileChange with observedAt when camera file is selected (GPS ready)', async () => {
-    // Simulate GPS resolving immediately with valid coordinates so the camera
-    // path proceeds directly (no Q&A panel).
-    Object.defineProperty(global.navigator, 'geolocation', {
-      value: {
-        getCurrentPosition: vi.fn((ok) =>
-          ok({ coords: { latitude: 31.7, longitude: 35.2 } })
-        ),
-      },
-      configurable: true,
-      writable: true,
-    });
-    const handleFileChange = vi.fn();
-    renderForm({ handleFileChange });
-    // Trigger camera click so startGps() runs synchronously (callback fires immediately).
-    fireEvent.click(screen.getByRole('button', { name: 'צלם תמונה' }));
+describe('ReportForm — camera flow', () => {
+  it('shows the location picker after camera file selected (does not auto-proceed)', () => {
+    renderForm();
     const input = screen.getByTestId('camera-input');
     fireEvent.change(input, { target: { files: [mockFile] } });
-    // Wait a tick for the async handler.
-    await Promise.resolve();
+    expect(screen.getByTestId('location-picker-stub')).toBeInTheDocument();
+  });
+
+  it('does not show the time question in camera mode', () => {
+    renderForm();
+    fireEvent.click(screen.getByRole('button', { name: 'צלם תמונה' }));
+    fireEvent.change(screen.getByTestId('camera-input'), { target: { files: [mockFile] } });
+    expect(screen.queryByText(/מתי צולמה התמונה/)).not.toBeInTheDocument();
+  });
+
+  it('camera flow: setting the pin enables Continue', () => {
+    renderForm();
+    fireEvent.click(screen.getByRole('button', { name: 'צלם תמונה' }));
+    fireEvent.change(screen.getByTestId('camera-input'), { target: { files: [mockFile] } });
+    expect(screen.getByRole('button', { name: 'המשך' })).toBeDisabled();
+    fireEvent.click(screen.getByTestId('stub-set-pin'));
+    expect(screen.getByRole('button', { name: 'המשך' })).not.toBeDisabled();
+  });
+
+  it('camera flow: Continue invokes handleFileChange with target coords and observedAt', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange });
+    fireEvent.click(screen.getByRole('button', { name: 'צלם תמונה' }));
+    fireEvent.change(screen.getByTestId('camera-input'), { target: { files: [mockFile] } });
+    fireEvent.click(screen.getByTestId('stub-set-pin'));
+    fireEvent.submit(screen.getByTestId('metadata-form'));
     expect(handleFileChange).toHaveBeenCalledWith(
       mockFile,
-      expect.objectContaining({ observedAt: expect.any(String) }),
+      expect.objectContaining({
+        targetLat: 31.5,
+        targetLng: 35.0,
+        observedAt: expect.any(String),
+      }),
     );
   });
 
@@ -93,18 +128,19 @@ describe('ReportForm — camera input', () => {
   });
 });
 
-// ── Gallery metadata Q&A ──────────────────────────────────────────────────────
+// ── Gallery flow ──────────────────────────────────────────────────────────────
 
-describe('ReportForm — gallery metadata Q&A', () => {
+describe('ReportForm — gallery flow', () => {
   function selectGalleryFile() {
     const input = screen.getByTestId('gallery-input');
     fireEvent.change(input, { target: { files: [mockFile] } });
   }
 
-  it('shows Q&A panel after gallery file is selected', () => {
+  it('shows the Q&A form after gallery file is selected', () => {
     renderForm();
     selectGalleryFile();
-    expect(screen.getByText(/היכן צולמה התמונה/)).toBeInTheDocument();
+    expect(screen.getByTestId('metadata-form')).toBeInTheDocument();
+    expect(screen.getByTestId('location-picker-stub')).toBeInTheDocument();
     expect(screen.getByText(/מתי צולמה התמונה/)).toBeInTheDocument();
   });
 
@@ -114,43 +150,32 @@ describe('ReportForm — gallery metadata Q&A', () => {
     expect(screen.getByText('photo.jpg')).toBeInTheDocument();
   });
 
-  it('Continue button is disabled until both questions answered', () => {
+  it('Continue is disabled until both pin and time are set', () => {
     renderForm();
     selectGalleryFile();
     expect(screen.getByRole('button', { name: 'המשך' })).toBeDisabled();
-  });
-
-  it('Continue button enables after both questions answered', () => {
-    renderForm();
-    selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/אני נמצא/));
+    fireEvent.click(screen.getByTestId('stub-set-pin'));
+    expect(screen.getByRole('button', { name: 'המשך' })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
     expect(screen.getByRole('button', { name: 'המשך' })).not.toBeDisabled();
   });
 
-  it('shows manual coordinate inputs when "מיקום אחר" is selected', () => {
+  it('Continue stays disabled when custom date is empty', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/מיקום אחר/));
-    expect(screen.getByLabelText('קו רוחב יעד')).toBeInTheDocument();
-    expect(screen.getByLabelText('קו אורך יעד')).toBeInTheDocument();
-  });
-
-  it('Continue stays disabled when manual selected but coords empty', () => {
-    renderForm();
-    selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/מיקום אחר/));
-    fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
+    fireEvent.click(screen.getByTestId('stub-set-pin'));
+    fireEvent.click(screen.getByLabelText(/תאריך ושעה אחרים/));
     expect(screen.getByRole('button', { name: 'המשך' })).toBeDisabled();
   });
 
-  it('Continue enables when manual coords are filled', () => {
+  it('Continue enables once custom date is filled', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/מיקום אחר/));
-    fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
-    fireEvent.change(screen.getByLabelText('קו רוחב יעד'), { target: { value: '31.5' } });
-    fireEvent.change(screen.getByLabelText('קו אורך יעד'), { target: { value: '35.0' } });
+    fireEvent.click(screen.getByTestId('stub-set-pin'));
+    fireEvent.click(screen.getByLabelText(/תאריך ושעה אחרים/));
+    fireEvent.change(screen.getByLabelText('תאריך ושעה של צפייה'), {
+      target: { value: '2024-12-01T10:30' },
+    });
     expect(screen.getByRole('button', { name: 'המשך' })).not.toBeDisabled();
   });
 
@@ -161,29 +186,20 @@ describe('ReportForm — gallery metadata Q&A', () => {
     expect(screen.getByLabelText('תאריך ושעה של צפייה')).toBeInTheDocument();
   });
 
-  it('calls handleFileChange with today timestamp when time=today', () => {
+  it('Continue with time=today produces a "now" observedAt', () => {
     const handleFileChange = vi.fn();
     renderForm({ handleFileChange });
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/אני נמצא/));
+    fireEvent.click(screen.getByTestId('stub-set-pin'));
     fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
-    fireEvent.submit(screen.getByRole('button', { name: 'המשך' }).closest('form'));
+    fireEvent.submit(screen.getByTestId('metadata-form'));
     expect(handleFileChange).toHaveBeenCalledWith(
       mockFile,
-      expect.objectContaining({ observedAt: expect.any(String) }),
-    );
-  });
-
-  it('calls handleFileChange with null observedAt when custom date not filled', () => {
-    const handleFileChange = vi.fn();
-    renderForm({ handleFileChange });
-    selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/אני נמצא/));
-    fireEvent.click(screen.getByLabelText(/תאריך ושעה אחרים/));
-    fireEvent.submit(screen.getByRole('button', { name: 'המשך' }).closest('form'));
-    expect(handleFileChange).toHaveBeenCalledWith(
-      mockFile,
-      expect.objectContaining({ observedAt: null }),
+      expect.objectContaining({
+        targetLat: 31.5,
+        targetLng: 35.0,
+        observedAt: expect.any(String),
+      }),
     );
   });
 
@@ -192,6 +208,25 @@ describe('ReportForm — gallery metadata Q&A', () => {
     selectGalleryFile();
     fireEvent.click(screen.getByRole('button', { name: 'חזרה' }));
     expect(screen.getByRole('button', { name: 'צלם תמונה' })).toBeInTheDocument();
+  });
+});
+
+// ── initialTarget prop ────────────────────────────────────────────────────────
+
+describe('ReportForm — initialTarget pre-fill (map-click flow)', () => {
+  it('passes initialTarget to the LocationPicker', () => {
+    renderForm({}, { initialTarget: { lat: 32.1, lng: 34.8 } });
+    fireEvent.change(screen.getByTestId('gallery-input'), { target: { files: [mockFile] } });
+    expect(screen.getByTestId('stub-initial-pin')).toHaveTextContent('32.1,34.8');
+  });
+
+  it('Continue with initialTarget is immediately enabled in camera mode once time defaults', () => {
+    const handleFileChange = vi.fn();
+    renderForm({ handleFileChange }, { initialTarget: { lat: 32.1, lng: 34.8 } });
+    // Camera mode auto-sets timeChoice='today', and targetCoords starts at initialTarget
+    fireEvent.click(screen.getByRole('button', { name: 'צלם תמונה' }));
+    fireEvent.change(screen.getByTestId('camera-input'), { target: { files: [mockFile] } });
+    expect(screen.getByRole('button', { name: 'המשך' })).not.toBeDisabled();
   });
 });
 
@@ -317,7 +352,7 @@ describe('ReportForm — file validation', () => {
     expect(screen.getByTestId('file-error')).toHaveTextContent(/פורמט לא נתמך/);
   });
 
-  it('does not show a file-error banner for a valid JPEG under 10 MB on the camera input', () => {
+  it('does not show a file-error banner for a valid JPEG on the camera input', () => {
     const handleFileChange = vi.fn();
     renderForm({ handleFileChange });
     const input = screen.getByTestId('camera-input');
@@ -338,7 +373,7 @@ describe('ReportForm — file validation', () => {
     const gifFile = new File(['x'], 'anim.gif', { type: 'image/gif' });
     const input = screen.getByTestId('gallery-input');
     fireEvent.change(input, { target: { files: [gifFile] } });
-    expect(screen.queryByText(/היכן צולמה התמונה/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('metadata-form')).not.toBeInTheDocument();
   });
 });
 

@@ -5,6 +5,7 @@ import {
   Marker,
   LayersControl,
   useMap,
+  useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -61,6 +62,20 @@ function MapController({ panTarget }) {
 }
 
 /**
+ * Right-click / long-press handler that lets the user start a new report at a
+ * chosen map location. The double-click default zoom is overridden too so
+ * a quick double-tap on mobile can also trigger the new-report flow.
+ */
+function NewReportHandler({ onCreateAt }) {
+  useMapEvents({
+    contextmenu(e) {
+      onCreateAt?.({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
+  return null;
+}
+
+/**
  * Determines whether a report has valid, plottable coordinates.
  * Reports without target coordinates appear in the sidebar but not on the map.
  */
@@ -78,6 +93,7 @@ export default function Map({
   panTarget = null,
   selectedReportId = null,
   onSelectReport = null,
+  onCreateAt = null,
 }) {
   const mappable = reports.filter(isMappable);
 
@@ -110,6 +126,7 @@ export default function Map({
       ))}
 
       <MapController panTarget={panTarget} />
+      {onCreateAt && <NewReportHandler onCreateAt={onCreateAt} />}
     </MapContainer>
   );
 }

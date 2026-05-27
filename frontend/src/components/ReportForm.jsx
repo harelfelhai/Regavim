@@ -6,11 +6,12 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle2,
-  MapPin,
   Clock,
   X,
 } from 'lucide-react';
 import { useReportForm, STEP } from '../hooks/useReportForm';
+import LocationPicker from './LocationPicker';
+import CameraCapture, { isMobileDevice } from './CameraCapture';
 
 // Must match MAX_IMAGE_BYTES in backend/services/image_service.py
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -84,34 +85,43 @@ const STEP_LABEL = {
   [STEP.SUBMITTING]: 'שולח דיווח...',
 };
 
-export default function ReportForm({ onClose, onSubmitted }) {
+/**
+ * @param {Object} props
+ * @param {Function} props.onClose
+ * @param {Function} props.onSubmitted
+ * @param {{ lat: number, lng: number } | null} [props.initialTarget]
+ *   Pre-fill the location picker — e.g. set when the user starts a report
+ *   by clicking on the main map.
+ */
+export default function ReportForm({ onClose, onSubmitted, initialTarget = null }) {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
-  // Pipeline-result fields
   const [description, setDescription] = useState('');
   const [finalCategory, setFinalCategory] = useState('');
-
-  // Client-side file validation error (cleared on next pick attempt)
   const [fileError, setFileError] = useState(null);
-
-  // True while a freshly-picked oversize image is being downscaled in-browser.
   const [isCompressing, setIsCompressing] = useState(false);
 
   // Capture mode: 'camera' | 'gallery' | null
   const [captureMode, setCaptureMode] = useState(null);
 
-  // Gallery: file waiting for metadata Q&A answers
+  // File waiting for metadata Q&A answers before upload starts
   const [pendingFile, setPendingFile] = useState(null);
 
-  // GPS
+  // Live in-browser camera preview (desktop). On mobile we use the native
+  // file input + capture attribute instead because it opens the OS camera.
+  const [showCamera, setShowCamera] = useState(false);
+
+  // GPS — photographer's position (used for the user_* fields and as the
+  // initial guess for the violation-site pin).
   const [gpsCoords, setGpsCoords] = useState(null);
   const [gpsStatus, setGpsStatus] = useState('idle'); // 'idle'|'loading'|'ready'|'error'
 
-  // Gallery Q&A
-  const [locationChoice, setLocationChoice] = useState(null); // 'here' | 'manual'
-  const [manualLat, setManualLat] = useState('');
-  const [manualLng, setManualLng] = useState('');
+  // The pin coordinate from LocationPicker — this is the *violation site*,
+  // which may differ from the phone's GPS reading.
+  const [targetCoords, setTargetCoords] = useState(initialTarget);
+
+  // Time question — only shown for gallery mode (camera = always "now")
   const [timeChoice, setTimeChoice] = useState(null); // 'today' | 'custom'
   const [customDateTime, setCustomDateTime] = useState('');
 
@@ -134,19 +144,32 @@ export default function ReportForm({ onClose, onSubmitted }) {
     step === STEP.SUBMITTING;
 
   // ── GPS ─────────────────────────────────────────────────────────────────────
+  // Two-tier strategy: try high-accuracy first (real GPS, 20 s for a cold
+  // fix); on timeout/error, fall back to low-accuracy (WiFi/IP geolocation,
+  // 20 s more). This dramatically reduces "GPS unavailable" false negatives
+  // when the device's GPS is still warming up after being toggled on.
   function startGps() {
     if (!navigator.geolocation) {
       setGpsStatus('error');
       return;
     }
     setGpsStatus('loading');
+
+    const onSuccess = (pos) => {
+      setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setGpsStatus('ready');
+    };
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGpsStatus('ready');
+      onSuccess,
+      () => {
+        navigator.geolocation.getCurrentPosition(
+          onSuccess,
+          () => setGpsStatus('error'),
+          { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 },
+        );
       },
-      () => setGpsStatus('error'),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 },
     );
   }
 
@@ -161,11 +184,10 @@ export default function ReportForm({ onClose, onSubmitted }) {
     setPendingFile(null);
     setGpsCoords(null);
     setGpsStatus('idle');
-    setLocationChoice(null);
-    setManualLat('');
-    setManualLng('');
+    setTargetCoords(initialTarget);
     setTimeChoice(null);
     setCustomDateTime('');
+    setShowCamera(false);
     if (cameraInputRef.current) cameraInputRef.current.value = '';
     if (galleryInputRef.current) galleryInputRef.current.value = '';
   }
@@ -174,12 +196,19 @@ export default function ReportForm({ onClose, onSubmitted }) {
   function handleCameraClick() {
     setCaptureMode('camera');
     startGps();
-    cameraInputRef.current?.click();
+    if (isMobileDevice()) {
+      // On mobile, the native input + capture="environment" opens the OS
+      // camera — better UX than a custom in-browser preview.
+      cameraInputRef.current?.click();
+    } else {
+      // On desktop, open the in-browser live camera preview.
+      setShowCamera(true);
+    }
   }
 
-  async function onCameraFileChange(e) {
-    const raw = e.target.files?.[0];
-    if (!raw) return;
+  // Shared post-validation handler — called by both the native file-input
+  // change event (mobile) and the in-browser camera snapshot (desktop).
+  async function processCameraFile(raw) {
     const typeError = validateFileType(raw);
     if (typeError) { setFileError(typeError); return; }
     setFileError(null);
@@ -192,39 +221,30 @@ export default function ReportForm({ onClose, onSubmitted }) {
       setIsCompressing(false);
     }
 
-    if (gpsStatus === 'ready') {
-      handleFileChange(file, {
-        userLat:   gpsCoords.lat,
-        userLng:   gpsCoords.lng,
-        targetLat: gpsCoords.lat,
-        targetLng: gpsCoords.lng,
-        observedAt: new Date().toISOString(),
-      });
-    } else {
-      // GPS still loading or failed — park the file and show location Q&A.
-      // Time is always "now" for a freshly taken photo.
-      setPendingFile(file);
-      setTimeChoice('today');
-      setLocationChoice(null);
-      setManualLat('');
-      setManualLng('');
-    }
+    // Always show the location confirmation step. The pin defaults to GPS
+    // (if available) so a user on-site can confirm with one click; but they
+    // can also drag it if the violation is elsewhere.
+    setPendingFile(file);
+    setTimeChoice('today'); // Camera = "now"
   }
 
-  // Auto-proceed when GPS resolves while a camera photo is parked (user hasn't
-  // touched the location picker yet — if they have, let them finish manually).
-  useEffect(() => {
-    if (captureMode !== 'camera' || !pendingFile || gpsStatus !== 'ready' || locationChoice !== null) return;
-    const file = pendingFile;
-    const lat  = gpsCoords.lat;
-    const lng  = gpsCoords.lng;
-    setPendingFile(null);
-    handleFileChange(file, {
-      userLat: lat, userLng: lng,
-      targetLat: lat, targetLng: lng,
-      observedAt: new Date().toISOString(),
-    });
-  }, [captureMode, pendingFile, gpsStatus, gpsCoords, handleFileChange, locationChoice]);
+  async function onCameraFileChange(e) {
+    const raw = e.target.files?.[0];
+    if (!raw) return;
+    await processCameraFile(raw);
+  }
+
+  function handleCameraCapture(file) {
+    setShowCamera(false);
+    processCameraFile(file);
+  }
+
+  function handleCameraFallback() {
+    // User clicked "use a file instead" inside the camera modal (e.g. when
+    // permission was denied). Open the native file input.
+    setShowCamera(false);
+    cameraInputRef.current?.click();
+  }
 
   // ── Gallery mode ─────────────────────────────────────────────────────────────
   function handleGalleryClick() {
@@ -250,9 +270,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
 
     setPendingFile(file);
     // Reset Q&A so the user can re-answer if they re-pick
-    setLocationChoice(null);
-    setManualLat('');
-    setManualLng('');
+    if (initialTarget == null) setTargetCoords(null);
     setTimeChoice(null);
     setCustomDateTime('');
   }
@@ -260,10 +278,6 @@ export default function ReportForm({ onClose, onSubmitted }) {
   // Q&A submit — passes collected metadata into the upload pipeline
   function handleMetadataSubmit(e) {
     e.preventDefault();
-    const userLat = gpsCoords?.lat ?? null;
-    const userLng = gpsCoords?.lng ?? null;
-    const targetLat = locationChoice === 'manual' ? (parseFloat(manualLat) || null) : userLat;
-    const targetLng = locationChoice === 'manual' ? (parseFloat(manualLng) || null) : userLng;
     const observedAt =
       timeChoice === 'today'
         ? new Date().toISOString()
@@ -271,16 +285,21 @@ export default function ReportForm({ onClose, onSubmitted }) {
           ? new Date(customDateTime).toISOString()
           : null;
 
-    handleFileChange(pendingFile, { userLat, userLng, targetLat, targetLng, observedAt });
+    handleFileChange(pendingFile, {
+      userLat:   gpsCoords?.lat ?? null,
+      userLng:   gpsCoords?.lng ?? null,
+      targetLat: targetCoords?.lat ?? null,
+      targetLng: targetCoords?.lng ?? null,
+      observedAt,
+    });
     setPendingFile(null);
   }
 
-  // Metadata "Continue" disabled until both questions are answered and valid
+  // "Continue" disabled until target pin is set AND time is answered.
   const metadataReady =
-    locationChoice !== null &&
+    targetCoords != null &&
     timeChoice !== null &&
-    (locationChoice !== 'manual' || (manualLat.trim() && manualLng.trim())) &&
-    !(locationChoice === 'here' && (gpsStatus === 'loading' || gpsStatus === 'error'));
+    (timeChoice !== 'custom' || customDateTime !== '');
 
   // ── Submit pipeline result ───────────────────────────────────────────────────
   async function onSubmit(e) {
@@ -310,6 +329,15 @@ export default function ReportForm({ onClose, onSubmitted }) {
 
   return (
     <div className="flex flex-col">
+      {/* ── Desktop in-browser camera ─────────────────────────────────────────── */}
+      {showCamera && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onClose={() => setShowCamera(false)}
+          onFallbackToFile={handleCameraFallback}
+        />
+      )}
+
       {/* ── Hidden file inputs ───────────────────────────────────────────────── */}
       <input
         ref={cameraInputRef}
@@ -395,10 +423,14 @@ export default function ReportForm({ onClose, onSubmitted }) {
         </div>
       )}
 
-      {/* ── Phase 2: Metadata Q&A (gallery always; camera only when GPS unavailable) */}
+      {/* ── Phase 2: Metadata Q&A ──────────────────────────────────────────── */}
       {step === STEP.IDLE && pendingFile && (
-        <form onSubmit={handleMetadataSubmit} className="flex flex-col gap-5 px-6 py-5">
-          {/* Selected file name */}
+        <form
+          onSubmit={handleMetadataSubmit}
+          className="flex flex-col gap-5 px-6 py-5 max-h-[80vh] overflow-y-auto"
+          data-testid="metadata-form"
+        >
+          {/* Selected file indicator */}
           <div className="flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-600">
             {captureMode === 'camera' ? (
               <Camera size={14} className="flex-shrink-0 text-regavim-blue" />
@@ -408,89 +440,18 @@ export default function ReportForm({ onClose, onSubmitted }) {
             <span className="truncate">
               {captureMode === 'camera' ? 'תמונה צולמה' : pendingFile.name}
             </span>
-            {captureMode === 'camera' && gpsStatus === 'loading' && (
-              <span className="ms-auto flex items-center gap-1 text-gray-400">
-                <Loader2 size={11} className="animate-spin" />
-                <span>GPS...</span>
-              </span>
-            )}
           </div>
 
-          {/* Location question */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 text-regavim-blue">
-              <MapPin size={14} />
-              <p className="text-xs font-semibold uppercase tracking-wide">
-                היכן צולמה התמונה?
-              </p>
-            </div>
+          {/* Location picker (mini-map) */}
+          <LocationPicker
+            initialPin={initialTarget}
+            gpsCoords={gpsCoords}
+            gpsStatus={gpsStatus}
+            onRetryGps={startGps}
+            onChange={setTargetCoords}
+          />
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="location"
-                value="here"
-                checked={locationChoice === 'here'}
-                onChange={() => setLocationChoice('here')}
-                className="accent-regavim-blue"
-              />
-              <span className="text-sm text-gray-700">
-                אני נמצא/ת במיקום כרגע
-                {locationChoice === 'here' && gpsStatus === 'loading' && (
-                  <Loader2 size={12} className="inline ms-1 animate-spin text-gray-400" />
-                )}
-                {locationChoice === 'here' && gpsStatus === 'ready' && (
-                  <CheckCircle2 size={12} className="inline ms-1 text-green-500" />
-                )}
-                {locationChoice === 'here' && gpsStatus === 'error' && (
-                  <span className="ms-1 text-amber-500 text-xs">(GPS אינו זמין)</span>
-                )}
-              </span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="location"
-                value="manual"
-                checked={locationChoice === 'manual'}
-                onChange={() => setLocationChoice('manual')}
-                className="accent-regavim-blue"
-              />
-              <span className="text-sm text-gray-700">מיקום אחר — אזין קואורדינטות</span>
-            </label>
-
-            {locationChoice === 'manual' && (
-              <div className="grid grid-cols-2 gap-2 ms-5">
-                <div>
-                  <label className="block text-xs text-gray-400 mb-0.5">קו רוחב</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="31.7683"
-                    value={manualLat}
-                    onChange={(e) => setManualLat(e.target.value)}
-                    aria-label="קו רוחב יעד"
-                    className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-0.5">קו אורך</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="35.2137"
-                    value={manualLng}
-                    onChange={(e) => setManualLng(e.target.value)}
-                    aria-label="קו אורך יעד"
-                    className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Time question — hidden for camera (always "now") */}
+          {/* Time question — gallery only (camera = always "now") */}
           {captureMode !== 'camera' && (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-regavim-blue">
@@ -537,7 +498,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
           )}
 
           {/* Q&A actions */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={() => { setPendingFile(null); setCaptureMode(null); }}
@@ -559,7 +520,6 @@ export default function ReportForm({ onClose, onSubmitted }) {
       {/* ── Phase 3+: Upload / analyse / ready pipeline ───────────────────────── */}
       {step !== STEP.IDLE && (
         <form onSubmit={onSubmit} className="flex flex-col gap-5 px-6 py-5">
-          {/* Image preview + busy overlay */}
           {imagePreview && (
             <div className="relative rounded-xl overflow-hidden shadow-sm">
               <img
@@ -576,7 +536,6 @@ export default function ReportForm({ onClose, onSubmitted }) {
             </div>
           )}
 
-          {/* Error banner */}
           {step === STEP.ERROR && (
             <div
               role="alert"
@@ -596,10 +555,8 @@ export default function ReportForm({ onClose, onSubmitted }) {
             </div>
           )}
 
-          {/* Fields shown only once image is analysed */}
           {step === STEP.READY && (
             <>
-              {/* AI suggestion */}
               <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
                 <div className="flex items-center gap-2 text-regavim-blue mb-2">
                   <Sparkles size={15} />
@@ -625,7 +582,6 @@ export default function ReportForm({ onClose, onSubmitted }) {
                 </select>
               </div>
 
-              {/* Description */}
               <div>
                 <label htmlFor="description" className="block text-xs font-medium text-gray-600 mb-1">
                   תיאור
@@ -640,7 +596,6 @@ export default function ReportForm({ onClose, onSubmitted }) {
                 />
               </div>
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={!displayedCategory}

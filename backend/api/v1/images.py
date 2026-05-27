@@ -204,10 +204,15 @@ def get_image_file(
     image_id: str,
     db: Session = Depends(get_db),
     storage: StorageProvider = Depends(get_storage),
-    current_user: User = Depends(get_current_user),
 ):
     """
     Serve the original image binary (EXIF intact) for display in the browser.
+
+    This endpoint is intentionally unauthenticated because <img src="..."> tags
+    cannot send custom Authorization headers. Security relies on the image_id
+    being an unguessable UUID (same model as Cloudinary's signed-URL serving,
+    which redirects here when configured). Reports themselves remain
+    authenticated, so leaking an image_id requires already being authenticated.
 
     When Cloudinary is active, issues a 302 redirect to the CDN URL so the
     binary is streamed directly from the CDN rather than proxied through

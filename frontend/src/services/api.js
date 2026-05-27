@@ -45,18 +45,18 @@ api.interceptors.response.use(
     if (isTimeout) {
       error.isTimeout = true;
       error.message =
-        'The upload timed out — try a smaller image or check your connection.';
+        'הבקשה ארכה יותר מדי — נסה/י תמונה קטנה יותר או בדוק/י את החיבור.';
     } else if (!error.response) {
       // True connection failure: server unreachable, DNS failure, etc.
       error.isNetworkError = true;
-      error.message = 'Network error — the backend may be offline.';
+      error.message = 'שגיאת רשת — ייתכן שהשרת אינו זמין.';
     } else if (error.response.status === 413) {
       // Server explicitly rejected the payload size.
       // Use the backend's own detail message when available; fall back to a
       // generic one so the user always sees an actionable explanation.
       error.message =
         error.response.data?.detail ??
-        'Image is too large. The maximum allowed size is 10 MB.';
+        'התמונה גדולה מדי. הגודל המקסימלי הוא 10 MB.';
     } else if (error.response.status === 401) {
       // Only auto-logout when the failing request was authenticated.
       // A 401 on an unauthenticated request (e.g. the login form with wrong

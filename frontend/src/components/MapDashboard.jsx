@@ -18,6 +18,9 @@ export default function MapDashboard() {
   const logout = useAuthStore((s) => s.logout);
 
   const [showForm, setShowForm] = useState(false);
+  // When non-null, the form opens with the location pre-filled (e.g. via a
+  // right-click / long-press on the main map).
+  const [initialTarget, setInitialTarget] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
 
   const { panTarget, panTo, selectedReportId, selectReport, clearSelection } = useMapStore();
@@ -41,7 +44,23 @@ export default function MapDashboard() {
 
   function handleSubmitted() {
     setShowForm(false);
+    setInitialTarget(null);
     refresh();
+  }
+
+  function handleCloseForm() {
+    setShowForm(false);
+    setInitialTarget(null);
+  }
+
+  function handleCreateAtMap(coords) {
+    setInitialTarget(coords);
+    setShowForm(true);
+  }
+
+  function handleNewReport() {
+    setInitialTarget(null);
+    setShowForm(true);
   }
 
   function handleLogout() {
@@ -62,7 +81,7 @@ export default function MapDashboard() {
               </h1>
             </div>
             <button
-              onClick={() => setShowForm(true)}
+              onClick={handleNewReport}
               aria-label="דיווח חדש"
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-regavim-blue text-white text-xs font-medium hover:bg-regavim-blue/90 transition-colors"
             >
@@ -124,19 +143,28 @@ export default function MapDashboard() {
           panTarget={panTarget}
           selectedReportId={selectedReportId}
           onSelectReport={handleSelectReport}
+          onCreateAt={handleCreateAtMap}
         />
+
+        {/* Floating hint for the right-click / long-press shortcut */}
+        {!showForm && (
+          <div className="absolute bottom-3 start-3 z-[500] bg-white/90 backdrop-blur rounded-lg shadow border border-gray-200 px-3 py-1.5 text-xs text-gray-600 pointer-events-none">
+            לחיצה ארוכה / ימנית במפה — דיווח חדש במיקום
+          </div>
+        )}
 
         {/* ── Report Form Modal ──────────────────────────────────────────── */}
         {showForm && (
           <div
             className="absolute inset-0 bg-black/40 flex items-center justify-center z-[1000]"
-            onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}
+            onClick={(e) => { if (e.target === e.currentTarget) handleCloseForm(); }}
             data-testid="report-form-backdrop"
           >
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
               <ReportForm
-                onClose={() => setShowForm(false)}
+                onClose={handleCloseForm}
                 onSubmitted={handleSubmitted}
+                initialTarget={initialTarget}
               />
             </div>
           </div>

@@ -2,13 +2,15 @@ import api from './api';
 
 /**
  * Construct the URL for serving the original image binary.
- * Uses the same base URL as the Axios instance so it works in all environments.
+ * Returns a path relative to VITE_API_BASE_URL (empty in dev → Vite proxy).
+ * The file endpoint is unauthenticated by design (relies on the UUID being
+ * unguessable) so an <img src="..."> tag can load it directly.
  *
  * @param {string} imageId - ID returned by uploadImage
  * @returns {string} URL suitable for <img src="...">
  */
 export function getImageFileUrl(imageId) {
-  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+  const base = import.meta.env.VITE_API_BASE_URL ?? '';
   return `${base}/api/v1/images/${imageId}/file`;
 }
 
@@ -24,10 +26,11 @@ export async function uploadImage(reportId, file) {
   const formData = new FormData();
   formData.append('report_id', reportId);
   formData.append('file', file);
-  // Override the 10 s instance default: large images (up to 10 MB) need more
-  // time on slow connections. 60 s covers 10 MB at ~1.4 Mbps with headroom.
+  // Override the 10 s instance default. 120 s covers up to 10 MB on slow
+  // mobile uplinks (~700 Kbps) with comfortable headroom for handshake and
+  // EXIF processing on the server.
   const { data } = await api.post('/api/v1/images/upload', formData, {
-    timeout: 60_000,
+    timeout: 120_000,
   });
   return data;
 }
@@ -42,6 +45,11 @@ export async function uploadImage(reportId, file) {
 export async function analyzeImage(imageId) {
   const formData = new FormData();
   formData.append('image_id', imageId);
-  const { data } = await api.post('/api/v1/images/analyze', formData);
+  // Claude vision can take 15-40 s on a large image. The 10 s axios default
+  // was triggering false timeouts on perfectly valid uploads. 90 s leaves
+  // ample headroom while still bounding the wait if the API is wedged.
+  const { data } = await api.post('/api/v1/images/analyze', formData, {
+    timeout: 90_000,
+  });
   return data;
 }

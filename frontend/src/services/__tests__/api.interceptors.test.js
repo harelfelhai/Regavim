@@ -94,13 +94,13 @@ describe('response interceptor', () => {
     await expect(rejected).rejects.not.toMatchObject({ isNetworkError: true });
   });
 
-  it('sets a "timed out" message on ECONNABORTED', async () => {
+  it('sets a Hebrew "timed out" message on ECONNABORTED', async () => {
     const error = new Error('timeout');
     error.code = 'ECONNABORTED';
     error.response = undefined;
     const resInterceptor = api.interceptors.response.handlers[0];
     await expect(resInterceptor.rejected(error)).rejects.toMatchObject({
-      message: expect.stringContaining('timed out'),
+      message: expect.stringContaining('ארכה'),
     });
   });
 

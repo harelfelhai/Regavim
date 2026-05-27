@@ -9,13 +9,13 @@ vi.mock('../api', () => ({
 describe('uploadImage', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('POSTs to /api/v1/images/upload with FormData and a 60-second timeout', async () => {
+  it('POSTs to /api/v1/images/upload with FormData and a long timeout', async () => {
     api.post.mockResolvedValue({ data: { id: 'img-1', has_exif: false } });
     await uploadImage('report-42', new File(['x'], 'photo.jpg', { type: 'image/jpeg' }));
     expect(api.post).toHaveBeenCalledWith(
       '/api/v1/images/upload',
       expect.any(FormData),
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
   });
 
@@ -44,12 +44,13 @@ describe('uploadImage', () => {
 describe('analyzeImage', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('POSTs to /api/v1/images/analyze with FormData', async () => {
+  it('POSTs to /api/v1/images/analyze with FormData and a long timeout', async () => {
     api.post.mockResolvedValue({ data: { ai_category: 'ILLEGAL_CONSTRUCTION', analysis_available: true } });
     await analyzeImage('img-99');
     expect(api.post).toHaveBeenCalledWith(
       '/api/v1/images/analyze',
       expect.any(FormData),
+      { timeout: 90_000 },
     );
   });
 
