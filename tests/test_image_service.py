@@ -84,7 +84,7 @@ class TestValidateImageSize:
         validate_image_size(b"x" * MAX_IMAGE_BYTES)
 
     def test_one_byte_over_limit_raises(self):
-        with pytest.raises(ValueError, match="exceeds"):
+        with pytest.raises(ValueError, match="חורג"):
             validate_image_size(b"x" * (MAX_IMAGE_BYTES + 1))
 
     def test_double_limit_raises(self):
@@ -113,11 +113,11 @@ class TestValidateImageFormat:
         assert validate_image_format(_make_tiff()) == "TIFF"
 
     def test_bmp_rejected(self):
-        with pytest.raises(ValueError, match="Unsupported"):
+        with pytest.raises(ValueError, match="פורמט לא נתמך"):
             validate_image_format(_make_bmp())
 
     def test_corrupt_bytes_raises(self):
-        with pytest.raises(ValueError, match="Cannot read image"):
+        with pytest.raises(ValueError, match="לא ניתן לקרוא"):
             validate_image_format(b"garbage bytes that are not an image")
 
     def test_empty_bytes_raises(self):

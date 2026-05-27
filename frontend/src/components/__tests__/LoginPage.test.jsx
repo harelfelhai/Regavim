@@ -11,7 +11,6 @@ const mockLogin = vi.fn();
 
 vi.mock('../../store/authStore', () => {
   const state = { token: null, login: null };
-  // selector-based call: useAuthStore((s) => s.login) → returns mockLogin
   const store = (selector) => selector(state);
   store.getState = () => state;
   store._state = state;
@@ -36,30 +35,29 @@ function renderLoginPage(initialPath = '/login') {
 beforeEach(() => {
   vi.clearAllMocks();
   mockLogin.mockReset();
-  // Inject the mock login fn into the store state so the selector returns it
   useAuthStore._state.login = mockLogin;
 });
 
 describe('LoginPage', () => {
   it('renders email and password fields', () => {
     renderLoginPage();
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('דוא״ל')).toBeInTheDocument();
+    expect(screen.getByLabelText('סיסמה')).toBeInTheDocument();
   });
 
   it('renders a submit button', () => {
     renderLoginPage();
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'כניסה' })).toBeInTheDocument();
   });
 
   it('show/hide toggle changes password input type', async () => {
     const user = userEvent.setup();
     renderLoginPage();
-    const input = screen.getByLabelText(/password/i);
+    const input = screen.getByLabelText('סיסמה');
     expect(input).toHaveAttribute('type', 'password');
-    await user.click(screen.getByRole('button', { name: /show/i }));
+    await user.click(screen.getByRole('button', { name: 'הצג' }));
     expect(input).toHaveAttribute('type', 'text');
-    await user.click(screen.getByRole('button', { name: /hide/i }));
+    await user.click(screen.getByRole('button', { name: 'הסתר' }));
     expect(input).toHaveAttribute('type', 'password');
   });
 
@@ -67,9 +65,9 @@ describe('LoginPage', () => {
     loginUser.mockResolvedValueOnce({ user: { id: 'u1' }, token: 'tok' });
     const user = userEvent.setup();
     renderLoginPage();
-    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
-    await user.type(screen.getByLabelText(/password/i), 'Pass1234!');
-    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await user.type(screen.getByLabelText('דוא״ל'), 'a@b.com');
+    await user.type(screen.getByLabelText('סיסמה'), 'Pass1234!');
+    await user.click(screen.getByRole('button', { name: 'כניסה' }));
     await waitFor(() => expect(loginUser).toHaveBeenCalledWith('a@b.com', 'Pass1234!'));
   });
 
@@ -78,10 +76,10 @@ describe('LoginPage', () => {
     loginUser.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
     const user = userEvent.setup();
     renderLoginPage();
-    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
-    await user.type(screen.getByLabelText(/password/i), 'Pass1!');
-    await user.click(screen.getByRole('button', { name: /sign in/i }));
-    expect(screen.getByRole('button', { name: /signing in/i })).toBeDisabled();
+    await user.type(screen.getByLabelText('דוא״ל'), 'a@b.com');
+    await user.type(screen.getByLabelText('סיסמה'), 'Pass1!');
+    await user.click(screen.getByRole('button', { name: 'כניסה' }));
+    expect(screen.getByRole('button', { name: 'מתחבר...' })).toBeDisabled();
     resolve({ user: {}, token: 'tok' });
   });
 
@@ -89,9 +87,9 @@ describe('LoginPage', () => {
     loginUser.mockRejectedValueOnce({ response: { data: { detail: 'Invalid credentials' } } });
     const user = userEvent.setup();
     renderLoginPage();
-    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
-    await user.type(screen.getByLabelText(/password/i), 'wrong');
-    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await user.type(screen.getByLabelText('דוא״ל'), 'a@b.com');
+    await user.type(screen.getByLabelText('סיסמה'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'כניסה' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials'));
   });
 
@@ -99,19 +97,19 @@ describe('LoginPage', () => {
     loginUser.mockRejectedValueOnce(new Error('Network error'));
     const user = userEvent.setup();
     renderLoginPage();
-    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
-    await user.type(screen.getByLabelText(/password/i), 'wrong');
-    await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Login failed'));
+    await user.type(screen.getByLabelText('דוא״ל'), 'a@b.com');
+    await user.type(screen.getByLabelText('סיסמה'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'כניסה' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('הכניסה נכשלה'));
   });
 
   it('navigates to /map on successful login', async () => {
     loginUser.mockResolvedValueOnce({ user: { id: 'u1' }, token: 'tok' });
     const user = userEvent.setup();
     renderLoginPage();
-    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
-    await user.type(screen.getByLabelText(/password/i), 'Pass1!');
-    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await user.type(screen.getByLabelText('דוא״ל'), 'a@b.com');
+    await user.type(screen.getByLabelText('סיסמה'), 'Pass1!');
+    await user.click(screen.getByRole('button', { name: 'כניסה' }));
     await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
   });
 });

@@ -22,7 +22,7 @@ export default function LoginPage() {
       login(user, token);
       navigate('/map');
     } catch (err) {
-      setError(err?.response?.data?.detail ?? 'Login failed. Please try again.');
+      setError(err?.response?.data?.detail ?? 'הכניסה נכשלה. נסה/י שנית.');
     } finally {
       setLoading(false);
     }
@@ -31,12 +31,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-semibold text-gray-800 mb-6">Regavim — Sign in</h1>
+        <h1 className="text-2xl font-semibold text-gray-800 mb-6">רגבים — כניסה</h1>
 
         <form onSubmit={handleSubmit} noValidate>
           <div className="mb-4">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+              דוא״ל
             </label>
             <input
               id="email"
@@ -51,7 +51,7 @@ export default function LoginPage() {
 
           <div className="mb-6">
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
+              סיסמה
             </label>
             <div className="relative">
               <input
@@ -61,14 +61,14 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm pr-16 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm pe-16 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700"
+                className="absolute end-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700"
               >
-                {showPassword ? 'Hide' : 'Show'}
+                {showPassword ? 'הסתר' : 'הצג'}
               </button>
             </div>
           </div>
@@ -84,7 +84,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg py-2 text-sm transition-colors"
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'מתחבר...' : 'כניסה'}
           </button>
         </form>
       </div>

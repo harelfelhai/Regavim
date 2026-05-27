@@ -85,7 +85,7 @@ def get_report(
     """Return a single report by ID."""
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
     return report
 
 
@@ -108,7 +108,7 @@ def update_report(
     """
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
     updates = payload.model_dump(exclude_unset=True)
 
@@ -122,7 +122,7 @@ def update_report(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot request deletion for a report that is already approved, rejected, or pending deletion.",
+            detail="לא ניתן לבקש מחיקה לדיווח שכבר אושר, נדחה או ממתין למחיקה.",
         )
 
     # Auto-confirm: pending → confirmed when coordinator sets final_category.
@@ -140,7 +140,7 @@ def update_report(
         if not (effective_description and effective_description.strip()):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="A description is required to confirm a report.",
+                detail="נדרש תיאור כדי לאשר דיווח.",
             )
 
     for field, value in updates.items():
@@ -169,18 +169,18 @@ def delete_report(
     """
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
     if force:
         if report.status != ReportStatus.PENDING.value:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Force-delete is only allowed for pending (draft) reports.",
+                detail="מחיקה מאולצת מותרת רק לדיווחים ממתינים (טיוטה).",
             )
         if report.images:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Force-delete is not allowed when images are attached.",
+                detail="מחיקה מאולצת אינה מותרת כאשר מצורפות תמונות.",
             )
         db.delete(report)
     else:

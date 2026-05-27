@@ -24,7 +24,7 @@ const MOCK_REPORT = {
   status: 'pending',
   ai_category: 'ROAD_PAVING',
   final_category: null,
-  description: 'Unauthorized road paving near the green area.',
+  description: 'סלילת דרך לא חוקית ליד השטח הירוק.',
   created_at: '2025-03-15T10:00:00Z',
   observed_at: null,
   target_lat: 31.5,
@@ -53,36 +53,36 @@ function renderPanel(hookOverrides = {}, props = {}) {
 describe('ReportDetailPanel — loading state', () => {
   it('shows loading spinner while fetching', () => {
     renderPanel({ loading: true });
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('טוען...')).toBeInTheDocument();
   });
 });
 
 describe('ReportDetailPanel — error state', () => {
   it('shows error message on fetch failure', () => {
-    renderPanel({ error: 'Failed to load report' });
-    expect(screen.getByText('Failed to load report')).toBeInTheDocument();
+    renderPanel({ error: 'שגיאה בטעינת הדיווח' });
+    expect(screen.getByText('שגיאה בטעינת הדיווח')).toBeInTheDocument();
   });
 });
 
 describe('ReportDetailPanel — report data', () => {
   it('shows status badge', () => {
     renderPanel({ report: MOCK_REPORT });
-    expect(screen.getByText('pending')).toBeInTheDocument();
+    expect(screen.getByText('ממתין')).toBeInTheDocument();
   });
 
   it('shows deletion_requested status badge', () => {
     renderPanel({ report: { ...MOCK_REPORT, status: 'deletion_requested' } });
-    expect(screen.getByText('deletion requested')).toBeInTheDocument();
+    expect(screen.getByText('ממתין למחיקה')).toBeInTheDocument();
   });
 
   it('shows description', () => {
     renderPanel({ report: MOCK_REPORT });
-    expect(screen.getByText('Unauthorized road paving near the green area.')).toBeInTheDocument();
+    expect(screen.getByText('סלילת דרך לא חוקית ליד השטח הירוק.')).toBeInTheDocument();
   });
 
   it('shows AI suggested category in the metadata section', () => {
     renderPanel({ report: MOCK_REPORT });
-    const spans = screen.getAllByText('ROAD PAVING');
+    const spans = screen.getAllByText('סלילת דרך');
     const metaSpan = spans.find((el) => el.tagName === 'SPAN');
     expect(metaSpan).toBeInTheDocument();
   });
@@ -95,12 +95,12 @@ describe('ReportDetailPanel — report data', () => {
   it('shows observed_at when present', () => {
     const report = { ...MOCK_REPORT, observed_at: '2025-03-14T08:30:00Z' };
     renderPanel({ report });
-    expect(screen.getByText(/Observed:/)).toBeInTheDocument();
+    expect(screen.getByText(/נצפה:/)).toBeInTheDocument();
   });
 
   it('does not show observed_at row when null', () => {
     renderPanel({ report: MOCK_REPORT });
-    expect(screen.queryByText(/Observed:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/נצפה:/)).not.toBeInTheDocument();
   });
 
   it('shows the evidence image when image_ids is non-empty', () => {
@@ -140,7 +140,7 @@ describe('ReportDetailPanel — confirmation form', () => {
   it('calls confirmCategory when form is submitted', () => {
     const confirmCategory = vi.fn().mockResolvedValue(true);
     renderPanel({ report: MOCK_REPORT, confirmCategory });
-    fireEvent.change(screen.getByRole('combobox', { name: /final category/i }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'קטגוריה סופית' }), {
       target: { value: 'DEMOLITION' },
     });
     fireEvent.submit(screen.getByTestId('confirm-form'));
@@ -148,15 +148,15 @@ describe('ReportDetailPanel — confirmation form', () => {
   });
 
   it('shows patchError below the form', () => {
-    renderPanel({ report: MOCK_REPORT, patchError: 'Update failed. Please try again.' });
-    expect(screen.getByRole('alert')).toHaveTextContent('Update failed. Please try again.');
+    renderPanel({ report: MOCK_REPORT, patchError: 'העדכון נכשל. נסה/י שנית.' });
+    expect(screen.getByRole('alert')).toHaveTextContent('העדכון נכשל. נסה/י שנית.');
   });
 
   it('shows approved read-only view for approved status', () => {
     renderPanel({
       report: { ...MOCK_REPORT, status: 'approved', final_category: 'ROAD_PAVING' },
     });
-    expect(screen.getByText(/Approved/)).toBeInTheDocument();
+    expect(screen.getByText(/מאושר:/)).toBeInTheDocument();
   });
 });
 
@@ -214,7 +214,7 @@ describe('ReportDetailPanel — deletion request button', () => {
   it('cancels the pending confirm when Cancel is clicked', () => {
     renderPanel({ report: MOCK_REPORT }, { currentUser: OWNER_USER });
     fireEvent.click(screen.getByTestId('request-deletion-btn'));
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'ביטול' }));
     expect(screen.queryByTestId('deletion-confirm-prompt')).not.toBeInTheDocument();
   });
 });
@@ -223,7 +223,7 @@ describe('ReportDetailPanel — navigation', () => {
   it('calls onBack when Back button is clicked', () => {
     const onBack = vi.fn();
     renderPanel({ report: MOCK_REPORT }, { onBack });
-    fireEvent.click(screen.getByRole('button', { name: /back to list/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'חזרה לרשימה' }));
     expect(onBack).toHaveBeenCalled();
   });
 });

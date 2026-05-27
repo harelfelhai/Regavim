@@ -102,7 +102,7 @@ def validate_image_size(image_bytes: bytes) -> None:
     if size > MAX_IMAGE_BYTES:
         limit_mb = MAX_IMAGE_BYTES // (1024 * 1024)
         raise ValueError(
-            f"Image size {size:,} bytes exceeds the {limit_mb} MB limit."
+            f"גודל התמונה {size:,} בייטים חורג מהמגבלה של {limit_mb} MB."
         )
 
 
@@ -117,10 +117,10 @@ def validate_image_format(image_bytes: bytes) -> str:
         img = PILImage.open(io.BytesIO(image_bytes))
         fmt = img.format
     except Exception as exc:
-        raise ValueError(f"Cannot read image: {exc}") from exc
+        raise ValueError(f"לא ניתן לקרוא את התמונה: {exc}") from exc
 
     if fmt not in SUPPORTED_FORMATS:
         raise ValueError(
-            f"Unsupported format '{fmt}'. Accepted: {', '.join(sorted(SUPPORTED_FORMATS))}."
+            f"פורמט לא נתמך '{fmt}'. פורמטים מותרים: {', '.join(sorted(SUPPORTED_FORMATS))}."
         )
     return fmt

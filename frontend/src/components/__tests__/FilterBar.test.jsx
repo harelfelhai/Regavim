@@ -11,20 +11,20 @@ function renderBar(filters = EMPTY, onChange = vi.fn()) {
 describe('FilterBar — rendering', () => {
   it('renders a status select', () => {
     renderBar();
-    expect(screen.getByRole('combobox', { name: /filter by status/i })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'סינון לפי סטטוס' })).toBeInTheDocument();
   });
 
   it('status select has all four status options', () => {
     renderBar();
-    ['Pending', 'Confirmed', 'Approved', 'Rejected'].forEach((label) => {
+    ['ממתין', 'אושר בשטח', 'מאושר', 'נדחה'].forEach((label) => {
       expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
     });
   });
 
   it('renders from and to date inputs', () => {
     renderBar();
-    expect(screen.getByLabelText('From date')).toBeInTheDocument();
-    expect(screen.getByLabelText('To date')).toBeInTheDocument();
+    expect(screen.getByLabelText('מתאריך')).toBeInTheDocument();
+    expect(screen.getByLabelText('עד תאריך')).toBeInTheDocument();
   });
 });
 
@@ -54,7 +54,7 @@ describe('FilterBar — Clear button', () => {
 describe('FilterBar — onChange callbacks', () => {
   it('calls onChange with updated status when select changes', () => {
     const { onChange } = renderBar();
-    fireEvent.change(screen.getByRole('combobox', { name: /filter by status/i }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'סינון לפי סטטוס' }), {
       target: { value: 'confirmed' },
     });
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, status: 'confirmed' });
@@ -62,13 +62,13 @@ describe('FilterBar — onChange callbacks', () => {
 
   it('calls onChange with updated dateFrom when from date changes', () => {
     const { onChange } = renderBar();
-    fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2025-01-01' } });
+    fireEvent.change(screen.getByLabelText('מתאריך'), { target: { value: '2025-01-01' } });
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, dateFrom: '2025-01-01' });
   });
 
   it('calls onChange with updated dateTo when to date changes', () => {
     const { onChange } = renderBar();
-    fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2025-12-31' } });
+    fireEvent.change(screen.getByLabelText('עד תאריך'), { target: { value: '2025-12-31' } });
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, dateTo: '2025-12-31' });
   });
 });

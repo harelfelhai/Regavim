@@ -2,6 +2,14 @@ import { Filter } from 'lucide-react';
 
 const STATUSES = ['pending', 'confirmed', 'approved', 'rejected', 'deletion_requested'];
 
+const STATUS_LABELS = {
+  pending:            'ממתין',
+  confirmed:          'אושר בשטח',
+  approved:           'מאושר',
+  rejected:           'נדחה',
+  deletion_requested: 'ממתין למחיקה',
+};
+
 export default function FilterBar({ filters, onChange }) {
   function set(key, value) {
     onChange({ ...filters, [key]: value });
@@ -14,7 +22,7 @@ export default function FilterBar({ filters, onChange }) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
           <Filter size={12} />
-          Filters
+          סינון
         </div>
         {hasActive && (
           <button
@@ -22,42 +30,42 @@ export default function FilterBar({ filters, onChange }) {
             className="text-xs text-regavim-blue hover:underline"
             data-testid="clear-filters"
           >
-            Clear
+            נקה
           </button>
         )}
       </div>
 
       <div className="space-y-2">
         <select
-          aria-label="Filter by status"
+          aria-label="סינון לפי סטטוס"
           value={filters.status}
           onChange={(e) => set('status', e.target.value)}
           className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
         >
-          <option value="">All statuses</option>
+          <option value="">כל הסטטוסים</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              {STATUS_LABELS[s] ?? s}
             </option>
           ))}
         </select>
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs text-gray-400 mb-0.5">From</label>
+            <label className="block text-xs text-gray-400 mb-0.5">מ-</label>
             <input
               type="date"
-              aria-label="From date"
+              aria-label="מתאריך"
               value={filters.dateFrom}
               onChange={(e) => set('dateFrom', e.target.value)}
               className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-0.5">To</label>
+            <label className="block text-xs text-gray-400 mb-0.5">עד</label>
             <input
               type="date"
-              aria-label="To date"
+              aria-label="עד תאריך"
               value={filters.dateTo}
               onChange={(e) => set('dateTo', e.target.value)}
               className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"

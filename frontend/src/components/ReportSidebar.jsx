@@ -7,10 +7,18 @@ export const STATUS_BADGE = {
   rejected:  'bg-gray-100 text-gray-500',
 };
 
+const STATUS_LABELS = {
+  pending:            'ממתין',
+  confirmed:          'אושר בשטח',
+  approved:           'מאושר',
+  rejected:           'נדחה',
+  deletion_requested: 'ממתין למחיקה',
+};
+
 function formatDate(iso) {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleDateString('en-GB', {
+    return new Date(iso).toLocaleDateString('he-IL', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -25,7 +33,7 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
     return (
       <div className="flex items-center justify-center gap-2 h-32 text-gray-400 text-sm">
         <Loader2 size={16} className="animate-spin" />
-        Loading reports…
+        טוען דיווחים...
       </div>
     );
   }
@@ -34,7 +42,7 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
     return (
       <div className="flex items-start gap-2 p-4 text-red-600 text-sm">
         <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-        <span>Failed to load reports. Check that the backend is running.</span>
+        <span>שגיאה בטעינת דיווחים. יש לוודא שהשרת פועל.</span>
       </div>
     );
   }
@@ -43,30 +51,30 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
     return (
       <div className="flex flex-col items-center justify-center h-32 text-gray-400 text-sm gap-2">
         <MapPin size={20} />
-        No reports yet
+        אין דיווחים עדיין
       </div>
     );
   }
 
   return (
-    <ul className="divide-y divide-gray-100" role="list" aria-label="Reports">
+    <ul className="divide-y divide-gray-100" role="list" aria-label="דיווחים">
       {reports.map((report) => {
         const badgeClass = STATUS_BADGE[report.status] ?? 'bg-gray-100 text-gray-500';
 
         return (
           <li key={report.id}>
             <button
-              className="w-full text-left px-4 py-3 hover:bg-regavim-blue/5 transition-colors"
+              className="w-full text-start px-4 py-3 hover:bg-regavim-blue/5 transition-colors"
               onClick={() => onSelectReport?.(report)}
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-gray-800 truncate">
-                  {report.description || 'No description'}
+                  {report.description || 'ללא תיאור'}
                 </p>
                 <span
-                  className={`shrink-0 text-xs rounded-full px-2 py-0.5 font-medium capitalize ${badgeClass}`}
+                  className={`shrink-0 text-xs rounded-full px-2 py-0.5 font-medium ${badgeClass}`}
                 >
-                  {report.status}
+                  {STATUS_LABELS[report.status] ?? report.status}
                 </span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">

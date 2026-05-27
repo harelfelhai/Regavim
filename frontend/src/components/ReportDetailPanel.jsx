@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  ArrowLeft,
+  ArrowRight,
   AlertCircle,
   Loader2,
   MapPin,
@@ -22,6 +22,24 @@ const CATEGORIES = [
   'OTHER',
 ];
 
+const CATEGORY_LABELS = {
+  ILLEGAL_CONSTRUCTION:      'בנייה לא חוקית',
+  LAND_GRADING:              'עבודות עפר',
+  AGRICULTURAL_ENCROACHMENT: 'השתלטות על קרקע חקלאית',
+  ROAD_PAVING:               'סלילת דרך',
+  DEMOLITION:                'הריסה',
+  ILLEGAL_DUMPING:           'השלכת פסולת',
+  OTHER:                     'אחר',
+};
+
+const STATUS_LABELS = {
+  pending:            'ממתין',
+  confirmed:          'אושר בשטח',
+  approved:           'מאושר',
+  rejected:           'נדחה',
+  deletion_requested: 'ממתין למחיקה',
+};
+
 const STATUS_BADGE = {
   pending:            'bg-amber-100 text-amber-700',
   confirmed:          'bg-blue-100 text-blue-700',
@@ -38,33 +56,27 @@ const NON_DELETABLE_STATUSES = new Set(['approved', 'rejected', 'deletion_reques
 
 function formatDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
+  return new Date(iso).toLocaleDateString('he-IL', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
 }
 
 function formatDateTime(iso) {
   if (!iso) return null;
-  return new Date(iso).toLocaleString('en-GB', {
+  return new Date(iso).toLocaleString('he-IL', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
 }
 
 function formatCategory(cat) {
-  return cat ? cat.replace(/_/g, ' ') : '—';
+  return cat ? (CATEGORY_LABELS[cat] ?? cat.replace(/_/g, ' ')) : '—';
 }
 
 function formatStatus(s) {
-  return s.replace(/_/g, ' ');
+  return STATUS_LABELS[s] ?? s.replace(/_/g, ' ');
 }
 
-/**
- * @param {string}  reportId
- * @param {Function} onBack
- * @param {Function} onPatched
- * @param {Object|null} currentUser  - { id, role } from the auth store
- */
 export default function ReportDetailPanel({ reportId, onBack, onPatched, currentUser }) {
   const [confirmValue, setConfirmValue] = useState('');
   const [deletionConfirmed, setDeletionConfirmed] = useState(false);
@@ -84,7 +96,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
     return (
       <div className="flex items-center justify-center gap-2 h-32 text-gray-400 text-sm">
         <Loader2 size={16} className="animate-spin" />
-        Loading…
+        טוען...
       </div>
     );
   }
@@ -105,7 +117,6 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const firstImageId = report.image_ids?.[0];
   const displayCategory = confirmValue || report.final_category || report.ai_category || '';
 
-  // Deletion request: visible to report owner and admins for non-terminal statuses.
   const canRequestDeletion =
     currentUser &&
     !NON_DELETABLE_STATUSES.has(report.status) &&
@@ -133,13 +144,13 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
       <div className="flex items-center justify-between px-4 py-3 border-b border-regavim-border sticky top-0 bg-white z-10">
         <button
           onClick={onBack}
-          aria-label="Back to list"
+          aria-label="חזרה לרשימה"
           className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors"
         >
-          <ArrowLeft size={15} />
-          Back
+          <ArrowRight size={15} />
+          חזרה
         </button>
-        <span className={`text-xs rounded-full px-2.5 py-0.5 font-medium capitalize ${badgeClass}`}>
+        <span className={`text-xs rounded-full px-2.5 py-0.5 font-medium ${badgeClass}`}>
           {formatStatus(report.status)}
         </span>
       </div>
@@ -149,7 +160,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
         <div className="w-full flex-shrink-0">
           <img
             src={getImageFileUrl(firstImageId)}
-            alt="Report evidence"
+            alt="תמונת ראיה"
             className="w-full object-cover max-h-52"
             data-testid="report-image"
           />
@@ -159,20 +170,20 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
       {/* Metadata */}
       <div className="px-4 py-4 space-y-3 flex-1">
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Date reported</p>
+          <p className="text-xs text-gray-400 mb-0.5">תאריך הדיווח</p>
           <p className="text-sm text-gray-800">{formatDate(report.created_at)}</p>
         </div>
 
         {report.observed_at && (
           <div className="flex items-center gap-1.5 text-xs text-gray-500">
             <Clock size={12} className="text-regavim-blue flex-shrink-0" />
-            <span>Observed: <span className="text-gray-700">{formatDateTime(report.observed_at)}</span></span>
+            <span>נצפה: <span className="text-gray-700">{formatDateTime(report.observed_at)}</span></span>
           </div>
         )}
 
         {report.description && (
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Description</p>
+            <p className="text-xs text-gray-400 mb-0.5">תיאור</p>
             <p className="text-sm text-gray-700">{report.description}</p>
           </div>
         )}
@@ -180,10 +191,10 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
           <div className="flex items-center gap-1.5 text-regavim-blue mb-1">
             <Sparkles size={13} />
-            <span className="text-xs font-semibold uppercase tracking-wide">AI Analysis</span>
+            <span className="text-xs font-semibold uppercase tracking-wide">ניתוח AI</span>
           </div>
           <p className="text-xs text-gray-600">
-            Suggested:{' '}
+            הצעת AI:{' '}
             <span className="font-medium text-gray-800">
               {formatCategory(report.ai_category)}
             </span>
@@ -192,7 +203,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
 
         {report.final_category && (
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Confirmed category</p>
+            <p className="text-xs text-gray-400 mb-0.5">קטגוריה מאושרת</p>
             <p className="text-sm font-medium text-gray-800">
               {formatCategory(report.final_category)}
             </p>
@@ -212,15 +223,15 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
       {/* Confirmation section — only for actionable statuses */}
       {canConfirm && (
         <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0">
-          <p className="text-xs font-medium text-gray-600 mb-2">Set final category</p>
+          <p className="text-xs font-medium text-gray-600 mb-2">קבע קטגוריה סופית</p>
           <form onSubmit={handleConfirm} className="space-y-2" data-testid="confirm-form">
             <select
-              aria-label="Final category"
+              aria-label="קטגוריה סופית"
               value={displayCategory}
               onChange={(e) => setConfirmValue(e.target.value)}
               className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
             >
-              <option value="">— select a category —</option>
+              <option value="">— בחר קטגוריה —</option>
               {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
                   {formatCategory(cat)}
@@ -242,10 +253,10 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
               {patching ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 size={14} className="animate-spin" />
-                  Saving…
+                  שומר...
                 </span>
               ) : (
-                'Confirm Category'
+                'אישור קטגוריה'
               )}
             </button>
           </form>
@@ -258,7 +269,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
           <div className="flex items-center gap-2 text-green-600 text-sm">
             <CheckCircle2 size={15} />
             <span>
-              Approved:{' '}
+              מאושר:{' '}
               <span className="font-medium">{formatCategory(report.final_category)}</span>
             </span>
           </div>
@@ -270,7 +281,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
         <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0 space-y-2">
           {deletionConfirmed && (
             <p className="text-xs text-red-600" data-testid="deletion-confirm-prompt">
-              Are you sure? This will flag the report for admin review.
+              האם אתה בטוח? הדיווח יסומן לבדיקת מנהל.
             </p>
           )}
           {patchError && !canConfirm && (
@@ -288,7 +299,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             }`}
           >
             <Trash2 size={14} />
-            {deletionConfirmed ? 'Confirm deletion request' : 'Request deletion'}
+            {deletionConfirmed ? 'אישור בקשת המחיקה' : 'בקשת מחיקה'}
           </button>
           {deletionConfirmed && (
             <button
@@ -296,7 +307,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
               onClick={() => setDeletionConfirmed(false)}
               className="w-full text-xs text-gray-400 hover:text-gray-600"
             >
-              Cancel
+              ביטול
             </button>
           )}
         </div>

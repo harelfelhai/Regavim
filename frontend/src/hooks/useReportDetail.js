@@ -26,7 +26,7 @@ export function useReportDetail(reportId, { onPatched } = {}) {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err?.message ?? 'Failed to load report');
+          setError(err?.message ?? 'שגיאה בטעינת הדיווח');
           setLoading(false);
         }
       });
@@ -47,7 +47,7 @@ export function useReportDetail(reportId, { onPatched } = {}) {
       onPatched?.();
       return true;
     } catch (err) {
-      setPatchError(err?.message ?? 'Update failed. Please try again.');
+      setPatchError(err?.message ?? 'העדכון נכשל. נסה/י שנית.');
       return false;
     } finally {
       setPatching(false);
@@ -65,7 +65,7 @@ export function useReportDetail(reportId, { onPatched } = {}) {
       onPatched?.();
       return true;
     } catch (err) {
-      setPatchError(err?.message ?? 'Request failed. Please try again.');
+      setPatchError(err?.message ?? 'הבקשה נכשלה. נסה/י שנית.');
       return false;
     } finally {
       setPatching(false);

@@ -86,7 +86,7 @@ export function useReportForm() {
       setAnalysisAvailable(analysis.analysis_available);
       setStep(STEP.READY);
     } catch (err) {
-      setError(err?.message ?? 'Upload failed. Please try again.');
+      setError(err?.message ?? 'ההעלאה נכשלה. נסה/י שנית.');
       setStep(STEP.ERROR);
       // Best-effort cleanup: hard-delete if no image attached yet, else soft-delete.
       if (createdReportId) {
@@ -111,7 +111,7 @@ export function useReportForm() {
       await patchReport(reportId, payload);
       setStep(STEP.DONE);
     } catch (err) {
-      setError(err?.message ?? 'Submit failed. Please try again.');
+      setError(err?.message ?? 'השליחה נכשלה. נסה/י שנית.');
       setStep(STEP.ERROR);
     }
   }

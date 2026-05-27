@@ -3,15 +3,15 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import ReportSidebar from '../ReportSidebar';
 
 const PENDING = {
-  id: '1', status: 'pending', description: 'Road paving',
+  id: '1', status: 'pending', description: 'סלילת דרך',
   target_lat: 31.5, target_lng: 35.0, created_at: '2024-03-22T09:15:00Z',
 };
 const CONFIRMED = {
-  id: '2', status: 'confirmed', description: 'Illegal construction',
+  id: '2', status: 'confirmed', description: 'בנייה לא חוקית',
   target_lat: 32.0, target_lng: 34.8, created_at: '2024-04-01T12:00:00Z',
 };
 const NO_COORDS = {
-  id: '3', status: 'pending', description: 'No location recorded',
+  id: '3', status: 'pending', description: 'אין מיקום',
   target_lat: null, target_lng: null, created_at: '2024-04-05T08:00:00Z',
 };
 const NO_DESC = {
@@ -24,26 +24,26 @@ afterEach(() => cleanup());
 describe('ReportSidebar — loading state', () => {
   it('shows a loading message when loading=true', () => {
     render(<ReportSidebar loading={true} />);
-    expect(screen.getByText(/loading reports/i)).toBeInTheDocument();
+    expect(screen.getByText(/טוען דיווחים/)).toBeInTheDocument();
   });
 });
 
 describe('ReportSidebar — error state', () => {
   it('shows an error message when error is set', () => {
     render(<ReportSidebar error={new Error('API down')} />);
-    expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
+    expect(screen.getByText(/שגיאה בטעינת דיווחים/)).toBeInTheDocument();
   });
 });
 
 describe('ReportSidebar — empty state', () => {
-  it('shows "No reports yet" when reports array is empty', () => {
+  it('shows "אין דיווחים עדיין" when reports array is empty', () => {
     render(<ReportSidebar reports={[]} />);
-    expect(screen.getByText(/no reports yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/אין דיווחים עדיין/)).toBeInTheDocument();
   });
 
-  it('shows "No reports yet" when reports prop is omitted', () => {
+  it('shows "אין דיווחים עדיין" when reports prop is omitted', () => {
     render(<ReportSidebar />);
-    expect(screen.getByText(/no reports yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/אין דיווחים עדיין/)).toBeInTheDocument();
   });
 });
 
@@ -53,17 +53,17 @@ describe('ReportSidebar — report list', () => {
   });
 
   it('renders all report items', () => {
-    expect(screen.getByText('Road paving')).toBeInTheDocument();
-    expect(screen.getByText('Illegal construction')).toBeInTheDocument();
-    expect(screen.getByText('No location recorded')).toBeInTheDocument();
+    expect(screen.getByText('סלילת דרך')).toBeInTheDocument();
+    expect(screen.getByText('בנייה לא חוקית')).toBeInTheDocument();
+    expect(screen.getByText('אין מיקום')).toBeInTheDocument();
   });
 
-  it('shows "No description" for reports with null description', () => {
-    expect(screen.getByText(/no description/i)).toBeInTheDocument();
+  it('shows "ללא תיאור" for reports with null description', () => {
+    expect(screen.getByText(/ללא תיאור/)).toBeInTheDocument();
   });
 
   it('shows status badge for each report', () => {
-    const badges = screen.getAllByText(/pending|confirmed|rejected/i);
+    const badges = screen.getAllByText(/ממתין|אושר בשטח|נדחה/);
     expect(badges.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -80,19 +80,19 @@ describe('ReportSidebar — report list', () => {
 describe('ReportSidebar — status badge colors', () => {
   it('pending badge uses amber styling', () => {
     render(<ReportSidebar reports={[PENDING]} />);
-    const badge = screen.getByText('pending');
+    const badge = screen.getByText('ממתין');
     expect(badge.className).toContain('amber');
   });
 
   it('confirmed badge uses blue styling', () => {
     render(<ReportSidebar reports={[CONFIRMED]} />);
-    const badge = screen.getByText('confirmed');
+    const badge = screen.getByText('אושר בשטח');
     expect(badge.className).toContain('blue');
   });
 
   it('rejected badge uses gray styling', () => {
     render(<ReportSidebar reports={[NO_DESC]} />);
-    const badge = screen.getByText('rejected');
+    const badge = screen.getByText('נדחה');
     expect(badge.className).toContain('gray');
   });
 });

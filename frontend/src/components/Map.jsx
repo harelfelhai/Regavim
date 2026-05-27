@@ -89,10 +89,10 @@ export default function Map({
       data-testid="map-container"
     >
       <LayersControl position="topright">
-        <BaseLayer checked name="Street">
+        <BaseLayer checked name="רחובות">
           <TileLayer url={OSM_URL} attribution={OSM_ATTR} />
         </BaseLayer>
-        <BaseLayer name="Satellite">
+        <BaseLayer name="לוויין">
           <TileLayer url={ESRI_URL} attribution={ESRI_ATTR} maxZoom={19} />
         </BaseLayer>
       </LayersControl>

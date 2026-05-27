@@ -115,7 +115,7 @@ async def upload_image(
 
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
     safe_original = Path(file.filename or "unknown").name
     storage_filename = f"{uuid4()}.{fmt.lower()}"
@@ -155,14 +155,14 @@ async def analyze_image(
     """
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="התמונה לא נמצאה.")
 
     try:
         file_bytes = storage.read(image.file_path)
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image file not found.",
+            detail="קובץ התמונה לא נמצא.",
         )
 
     # Derive media type from the original filename (works for both local and cloud paths).
@@ -195,7 +195,7 @@ def get_image_metadata(
     """Return image metadata. The original file (EXIF intact) is served by /{id}/file."""
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="התמונה לא נמצאה.")
     return image
 
 
@@ -215,7 +215,7 @@ def get_image_file(
     """
     image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
     if not image:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="התמונה לא נמצאה.")
 
     cdn_url = storage.public_url(image.file_path)
     if cdn_url:
@@ -226,7 +226,7 @@ def get_image_file(
     if not file_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image file not found on disk.",
+            detail="קובץ התמונה לא נמצא בדיסק.",
         )
     media_type = _EXT_TO_MEDIA_TYPE.get(file_path.suffix.lower(), "application/octet-stream")
     return FileResponse(path=file_path, media_type=media_type)

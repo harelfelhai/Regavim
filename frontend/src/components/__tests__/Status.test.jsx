@@ -23,7 +23,7 @@ describe('Status', () => {
   it('shows checking text on initial render before the fetch resolves', () => {
     api.get.mockReturnValue(new Promise(() => {})); // never resolves
     render(<Status />);
-    expect(screen.getByText(/checking/i)).toBeInTheDocument();
+    expect(screen.getByText(/בודק חיבור/)).toBeInTheDocument();
   });
 
   it('renders a status region for screen readers', () => {
@@ -38,7 +38,7 @@ describe('Status', () => {
     api.get.mockResolvedValue({ data: { status: 'ok' } });
     render(<Status />);
     await waitFor(() =>
-      expect(screen.getByText(/connected/i)).toBeInTheDocument()
+      expect(screen.getByText(/שרת מחובר/)).toBeInTheDocument()
     );
   });
 
@@ -60,7 +60,7 @@ describe('Status', () => {
     api.get.mockRejectedValue(new Error('Network Error'));
     render(<Status />);
     await waitFor(() =>
-      expect(screen.getByText(/offline/i)).toBeInTheDocument()
+      expect(screen.getByText(/שרת לא זמין/)).toBeInTheDocument()
     );
   });
 
@@ -68,7 +68,7 @@ describe('Status', () => {
     api.get.mockRejectedValue({ response: { status: 500 } });
     render(<Status />);
     await waitFor(() =>
-      expect(screen.getByText(/offline/i)).toBeInTheDocument()
+      expect(screen.getByText(/שרת לא זמין/)).toBeInTheDocument()
     );
   });
 
@@ -76,7 +76,7 @@ describe('Status', () => {
     api.get.mockRejectedValue({ response: { status: 503 } });
     render(<Status />);
     await waitFor(() =>
-      expect(screen.getByText(/offline/i)).toBeInTheDocument()
+      expect(screen.getByText(/שרת לא זמין/)).toBeInTheDocument()
     );
   });
 
@@ -84,7 +84,7 @@ describe('Status', () => {
     api.get.mockRejectedValue(new Error('ECONNREFUSED'));
     render(<Status />);
     await waitFor(() =>
-      expect(screen.queryByText(/connected/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/שרת מחובר/)).not.toBeInTheDocument()
     );
   });
 });

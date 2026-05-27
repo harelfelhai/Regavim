@@ -19,7 +19,7 @@ const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/tiff']);
 
 function validateFileType(file) {
   if (!ACCEPTED_TYPES.has(file.type)) {
-    return 'Unsupported format. Please upload a JPEG, PNG, or TIFF image.';
+    return 'פורמט לא נתמך. יש להעלות תמונה בפורמט JPEG, PNG, או TIFF.';
   }
   return null;
 }
@@ -51,7 +51,7 @@ async function compressIfNeeded(file) {
       return new File([blob], newName, { type: 'image/jpeg' });
     }
   }
-  throw new Error('Image could not be compressed below 10 MB.');
+  throw new Error('לא ניתן לכווץ את התמונה מתחת ל-10 MB.');
 }
 
 const CATEGORIES = [
@@ -64,14 +64,24 @@ const CATEGORIES = [
   'OTHER',
 ];
 
+const CATEGORY_LABELS = {
+  ILLEGAL_CONSTRUCTION:      'בנייה לא חוקית',
+  LAND_GRADING:              'עבודות עפר',
+  AGRICULTURAL_ENCROACHMENT: 'השתלטות על קרקע חקלאית',
+  ROAD_PAVING:               'סלילת דרך',
+  DEMOLITION:                'הריסה',
+  ILLEGAL_DUMPING:           'השלכת פסולת',
+  OTHER:                     'אחר',
+};
+
 function formatCategory(cat) {
-  return cat.replace(/_/g, ' ');
+  return cat ? (CATEGORY_LABELS[cat] ?? cat.replace(/_/g, ' ')) : '—';
 }
 
 const STEP_LABEL = {
-  [STEP.UPLOADING]:  'Uploading image…',
-  [STEP.ANALYZING]:  'Analysing with AI…',
-  [STEP.SUBMITTING]: 'Submitting report…',
+  [STEP.UPLOADING]:  'מעלה תמונה...',
+  [STEP.ANALYZING]:  'מנתח עם AI...',
+  [STEP.SUBMITTING]: 'שולח דיווח...',
 };
 
 export default function ReportForm({ onClose, onSubmitted }) {
@@ -178,7 +188,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
     if (raw.size > MAX_FILE_BYTES) {
       setIsCompressing(true);
       try { file = await compressIfNeeded(raw); }
-      catch { setFileError('Could not process this image — please try another.'); setIsCompressing(false); return; }
+      catch { setFileError('לא ניתן לעבד את התמונה — נסה/י תמונה אחרת.'); setIsCompressing(false); return; }
       setIsCompressing(false);
     }
 
@@ -234,7 +244,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
     if (raw.size > MAX_FILE_BYTES) {
       setIsCompressing(true);
       try { file = await compressIfNeeded(raw); }
-      catch { setFileError('Could not process this image — please try another.'); setIsCompressing(false); return; }
+      catch { setFileError('לא ניתן לעבד את התמונה — נסה/י תמונה אחרת.'); setIsCompressing(false); return; }
       setIsCompressing(false);
     }
 
@@ -284,15 +294,15 @@ export default function ReportForm({ onClose, onSubmitted }) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-12 px-6 text-center">
         <CheckCircle2 size={48} className="text-green-500" />
-        <h2 className="text-lg font-semibold text-gray-900">Report submitted!</h2>
+        <h2 className="text-lg font-semibold text-gray-900">הדיווח נשלח!</h2>
         <p className="text-sm text-gray-500">
-          The report is now confirmed and visible on the map.
+          הדיווח אושר ומוצג במפה.
         </p>
         <button
           onClick={onClose}
           className="mt-2 px-5 py-2 rounded-lg bg-regavim-blue text-white text-sm font-medium hover:bg-regavim-blue/90 transition-colors"
         >
-          Close
+          סגור
         </button>
       </div>
     );
@@ -307,7 +317,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
         accept="image/jpeg,image/png,image/tiff"
         capture="environment"
         className="hidden"
-        aria-label="Camera capture"
+        aria-label="צילום מצלמה"
         onChange={onCameraFileChange}
         data-testid="camera-input"
       />
@@ -316,17 +326,17 @@ export default function ReportForm({ onClose, onSubmitted }) {
         type="file"
         accept="image/jpeg,image/png,image/tiff"
         className="hidden"
-        aria-label="Gallery upload"
+        aria-label="העלאה מהגלריה"
         onChange={onGalleryFileChange}
         data-testid="gallery-input"
       />
 
       {/* ── Header ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <h2 className="text-base font-semibold text-regavim-navy">New Report</h2>
+        <h2 className="text-base font-semibold text-regavim-navy">דיווח חדש</h2>
         <button
           onClick={() => { handleReset(); onClose?.(); }}
-          aria-label="Close form"
+          aria-label="סגירת הטופס"
           className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
         >
           <X size={18} />
@@ -337,28 +347,28 @@ export default function ReportForm({ onClose, onSubmitted }) {
       {step === STEP.IDLE && !pendingFile && (
         <div className="flex flex-col gap-4 px-6 py-6">
           <p className="text-sm text-gray-500 text-center">
-            How would you like to add the evidence photo?
+            כיצד תרצה/י להוסיף את תמונת הראיה?
           </p>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={handleCameraClick}
-              aria-label="Take photo"
+              aria-label="צלם תמונה"
               className="flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 hover:border-regavim-blue hover:text-regavim-blue transition-colors"
             >
               <Camera size={28} />
-              <span className="text-xs font-medium">Take Photo</span>
-              <span className="text-xs text-gray-400">Live camera</span>
+              <span className="text-xs font-medium">צלם תמונה</span>
+              <span className="text-xs text-gray-400">מצלמה חיה</span>
             </button>
             <button
               type="button"
               onClick={handleGalleryClick}
-              aria-label="Choose from gallery"
+              aria-label="בחר מהגלריה"
               className="flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 text-gray-500 hover:border-regavim-blue hover:text-regavim-blue transition-colors"
             >
               <Images size={28} />
-              <span className="text-xs font-medium">Choose Photo</span>
-              <span className="text-xs text-gray-400">From device</span>
+              <span className="text-xs font-medium">בחר תמונה</span>
+              <span className="text-xs text-gray-400">מהמכשיר</span>
             </button>
           </div>
           {fileError && (
@@ -378,10 +388,10 @@ export default function ReportForm({ onClose, onSubmitted }) {
               className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-regavim-blue"
             >
               <Loader2 size={14} className="animate-spin flex-shrink-0" />
-              <span>Image is large — compressing for upload…</span>
+              <span>התמונה גדולה — נדחסת להעלאה...</span>
             </div>
           )}
-          <p className="text-xs text-gray-400 text-center">JPEG · PNG · TIFF · larger images are auto-compressed</p>
+          <p className="text-xs text-gray-400 text-center">JPEG · PNG · TIFF · תמונות גדולות נדחסות אוטומטית</p>
         </div>
       )}
 
@@ -396,12 +406,12 @@ export default function ReportForm({ onClose, onSubmitted }) {
               <Images size={14} className="flex-shrink-0 text-regavim-blue" />
             )}
             <span className="truncate">
-              {captureMode === 'camera' ? 'Photo captured' : pendingFile.name}
+              {captureMode === 'camera' ? 'תמונה צולמה' : pendingFile.name}
             </span>
             {captureMode === 'camera' && gpsStatus === 'loading' && (
-              <span className="ml-auto flex items-center gap-1 text-gray-400">
+              <span className="ms-auto flex items-center gap-1 text-gray-400">
                 <Loader2 size={11} className="animate-spin" />
-                <span>GPS…</span>
+                <span>GPS...</span>
               </span>
             )}
           </div>
@@ -411,7 +421,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
             <div className="flex items-center gap-1.5 text-regavim-blue">
               <MapPin size={14} />
               <p className="text-xs font-semibold uppercase tracking-wide">
-                Where was this photo taken?
+                היכן צולמה התמונה?
               </p>
             </div>
 
@@ -425,15 +435,15 @@ export default function ReportForm({ onClose, onSubmitted }) {
                 className="accent-regavim-blue"
               />
               <span className="text-sm text-gray-700">
-                I&apos;m at the location right now
+                אני נמצא/ת במיקום כרגע
                 {locationChoice === 'here' && gpsStatus === 'loading' && (
-                  <Loader2 size={12} className="inline ml-1 animate-spin text-gray-400" />
+                  <Loader2 size={12} className="inline ms-1 animate-spin text-gray-400" />
                 )}
                 {locationChoice === 'here' && gpsStatus === 'ready' && (
-                  <CheckCircle2 size={12} className="inline ml-1 text-green-500" />
+                  <CheckCircle2 size={12} className="inline ms-1 text-green-500" />
                 )}
                 {locationChoice === 'here' && gpsStatus === 'error' && (
-                  <span className="ml-1 text-amber-500 text-xs">(GPS unavailable)</span>
+                  <span className="ms-1 text-amber-500 text-xs">(GPS אינו זמין)</span>
                 )}
               </span>
             </label>
@@ -447,32 +457,32 @@ export default function ReportForm({ onClose, onSubmitted }) {
                 onChange={() => setLocationChoice('manual')}
                 className="accent-regavim-blue"
               />
-              <span className="text-sm text-gray-700">Somewhere else — I&apos;ll enter coordinates</span>
+              <span className="text-sm text-gray-700">מיקום אחר — אזין קואורדינטות</span>
             </label>
 
             {locationChoice === 'manual' && (
-              <div className="grid grid-cols-2 gap-2 ml-5">
+              <div className="grid grid-cols-2 gap-2 ms-5">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-0.5">Latitude</label>
+                  <label className="block text-xs text-gray-400 mb-0.5">קו רוחב</label>
                   <input
                     type="number"
                     step="any"
-                    placeholder="e.g. 31.7683"
+                    placeholder="31.7683"
                     value={manualLat}
                     onChange={(e) => setManualLat(e.target.value)}
-                    aria-label="Target latitude"
+                    aria-label="קו רוחב יעד"
                     className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-0.5">Longitude</label>
+                  <label className="block text-xs text-gray-400 mb-0.5">קו אורך</label>
                   <input
                     type="number"
                     step="any"
-                    placeholder="e.g. 35.2137"
+                    placeholder="35.2137"
                     value={manualLng}
                     onChange={(e) => setManualLng(e.target.value)}
-                    aria-label="Target longitude"
+                    aria-label="קו אורך יעד"
                     className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
                   />
                 </div>
@@ -486,7 +496,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
               <div className="flex items-center gap-1.5 text-regavim-blue">
                 <Clock size={14} />
                 <p className="text-xs font-semibold uppercase tracking-wide">
-                  When was this photo taken?
+                  מתי צולמה התמונה?
                 </p>
               </div>
 
@@ -499,7 +509,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
                   onChange={() => setTimeChoice('today')}
                   className="accent-regavim-blue"
                 />
-                <span className="text-sm text-gray-700">Today (right now)</span>
+                <span className="text-sm text-gray-700">היום (כרגע)</span>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer">
@@ -511,7 +521,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
                   onChange={() => setTimeChoice('custom')}
                   className="accent-regavim-blue"
                 />
-                <span className="text-sm text-gray-700">Another date &amp; time</span>
+                <span className="text-sm text-gray-700">תאריך ושעה אחרים</span>
               </label>
 
               {timeChoice === 'custom' && (
@@ -519,7 +529,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
                   type="datetime-local"
                   value={customDateTime}
                   onChange={(e) => setCustomDateTime(e.target.value)}
-                  aria-label="Observation date and time"
+                  aria-label="תאריך ושעה של צפייה"
                   className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
                 />
               )}
@@ -533,14 +543,14 @@ export default function ReportForm({ onClose, onSubmitted }) {
               onClick={() => { setPendingFile(null); setCaptureMode(null); }}
               className="flex-1 rounded-lg border border-gray-200 text-gray-500 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
             >
-              Back
+              חזרה
             </button>
             <button
               type="submit"
               disabled={!metadataReady}
               className="flex-1 rounded-lg bg-regavim-blue text-white py-2.5 text-sm font-semibold hover:bg-regavim-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              Continue
+              המשך
             </button>
           </div>
         </form>
@@ -554,7 +564,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
             <div className="relative rounded-xl overflow-hidden shadow-sm">
               <img
                 src={imagePreview}
-                alt="Preview of selected image"
+                alt="תצוגה מקדימה של התמונה הנבחרת"
                 className="w-full h-44 object-cover"
               />
               {isBusy && (
@@ -580,7 +590,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
                   onClick={handleReset}
                   className="mt-1 underline text-red-600 hover:text-red-800 text-xs"
                 >
-                  Try again
+                  נסה/י שוב
                 </button>
               </div>
             </div>
@@ -594,11 +604,11 @@ export default function ReportForm({ onClose, onSubmitted }) {
                 <div className="flex items-center gap-2 text-regavim-blue mb-2">
                   <Sparkles size={15} />
                   <span className="text-xs font-semibold uppercase tracking-wide">
-                    {analysisAvailable ? 'AI Suggestion' : 'AI unavailable — please classify'}
+                    {analysisAvailable ? 'הצעת AI' : 'AI לא זמין — אנא סווג/י'}
                   </span>
                 </div>
                 <label htmlFor="category" className="block text-xs text-gray-500 mb-1">
-                  Violation category
+                  קטגוריית עבירה
                 </label>
                 <select
                   id="category"
@@ -606,7 +616,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
                   onChange={(e) => setFinalCategory(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
                 >
-                  <option value="">— select a category —</option>
+                  <option value="">— בחר קטגוריה —</option>
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
                       {formatCategory(cat)}
@@ -618,12 +628,12 @@ export default function ReportForm({ onClose, onSubmitted }) {
               {/* Description */}
               <div>
                 <label htmlFor="description" className="block text-xs font-medium text-gray-600 mb-1">
-                  Description
+                  תיאור
                 </label>
                 <textarea
                   id="description"
                   rows={3}
-                  placeholder="Describe what you observed…"
+                  placeholder="תאר/י את שנצפה..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
@@ -636,7 +646,7 @@ export default function ReportForm({ onClose, onSubmitted }) {
                 disabled={!displayedCategory}
                 className="w-full rounded-lg bg-regavim-blue text-white py-2.5 text-sm font-semibold hover:bg-regavim-blue/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit Report
+                שלח דיווח
               </button>
             </>
           )}

@@ -52,7 +52,7 @@ export default function MapDashboard() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-regavim-bg">
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="w-72 flex-shrink-0 bg-regavim-surface flex flex-col border-r border-regavim-border shadow-sm">
+      <aside className="w-72 flex-shrink-0 bg-regavim-surface flex flex-col border-e border-regavim-border shadow-sm">
         <header className="px-4 py-3 border-b border-regavim-border flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -63,17 +63,17 @@ export default function MapDashboard() {
             </div>
             <button
               onClick={() => setShowForm(true)}
-              aria-label="New report"
+              aria-label="דיווח חדש"
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-regavim-blue text-white text-xs font-medium hover:bg-regavim-blue/90 transition-colors"
             >
               <Plus size={13} />
-              New
+              חדש
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5 ml-6">
+          <p className="text-xs text-gray-400 mt-0.5 ms-6">
             {loading
-              ? 'Loading…'
-              : `${reports.length} report${reports.length !== 1 ? 's' : ''}`}
+              ? 'טוען...'
+              : `${reports.length} דיווחים`}
           </p>
         </header>
 
@@ -107,12 +107,12 @@ export default function MapDashboard() {
           </span>
           <button
             onClick={handleLogout}
-            aria-label="Sign out"
-            title="Sign out"
+            aria-label="יציאה"
+            title="יציאה"
             className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
           >
             <LogOut size={13} />
-            Sign out
+            יציאה
           </button>
         </footer>
       </aside>

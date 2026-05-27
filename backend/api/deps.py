@@ -23,14 +23,14 @@ def get_current_user(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
+            detail="טוקן לא תקין",
             headers={"WWW-Authenticate": "Bearer"},
         )
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="המשתמש לא נמצא",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user

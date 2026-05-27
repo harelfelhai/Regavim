@@ -3,15 +3,15 @@ import api from '../services/api';
 
 const STATE_CONFIG = {
   checking: {
-    label: 'Checking connection…',
+    label: 'בודק חיבור...',
     dot: 'bg-yellow-400 animate-pulse',
   },
   connected: {
-    label: 'Backend Connected',
+    label: 'שרת מחובר',
     dot: 'bg-green-500',
   },
   error: {
-    label: 'Backend Offline',
+    label: 'שרת לא זמין',
     dot: 'bg-red-500',
   },
 };

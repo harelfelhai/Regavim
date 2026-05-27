@@ -58,20 +58,20 @@ describe('MapDashboard — logout', () => {
 
   it('renders a sign-out button', () => {
     renderDashboard();
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'יציאה' })).toBeInTheDocument();
   });
 
   it('calls logout when sign-out is clicked', async () => {
     const user = userEvent.setup();
     renderDashboard();
-    await user.click(screen.getByRole('button', { name: /sign out/i }));
+    await user.click(screen.getByRole('button', { name: 'יציאה' }));
     expect(mockLogout).toHaveBeenCalledOnce();
   });
 
   it('navigates to /login after signing out', async () => {
     const user = userEvent.setup();
     renderDashboard();
-    await user.click(screen.getByRole('button', { name: /sign out/i }));
+    await user.click(screen.getByRole('button', { name: 'יציאה' }));
     await waitFor(() =>
       expect(screen.getByText('Login Page')).toBeInTheDocument()
     );
@@ -86,6 +86,6 @@ describe('MapDashboard — layout', () => {
 
   it('renders the New report button', () => {
     renderDashboard();
-    expect(screen.getByRole('button', { name: /new report/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'דיווח חדש' })).toBeInTheDocument();
   });
 });

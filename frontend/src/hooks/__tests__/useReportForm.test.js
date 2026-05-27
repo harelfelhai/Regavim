@@ -139,7 +139,7 @@ describe('useReportForm — error handling', () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    expect(result.current.error).toBe('Upload failed. Please try again.');
+    expect(result.current.error).toBe('ההעלאה נכשלה. נסה/י שנית.');
   });
 });
 

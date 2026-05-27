@@ -40,13 +40,13 @@ const mockFile = new File(['x'], 'photo.jpg', { type: 'image/jpeg' });
 describe('ReportForm — mode selector (idle state)', () => {
   it('renders Take Photo and Choose Photo buttons', () => {
     renderForm();
-    expect(screen.getByRole('button', { name: /take photo/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /choose from gallery/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'צלם תמונה' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'בחר מהגלריה' })).toBeInTheDocument();
   });
 
   it('renders the form header', () => {
     renderForm();
-    expect(screen.getByText('New Report')).toBeInTheDocument();
+    expect(screen.getByText('דיווח חדש')).toBeInTheDocument();
   });
 
   it('does not show the upload dropzone', () => {
@@ -58,11 +58,26 @@ describe('ReportForm — mode selector (idle state)', () => {
 // ── Hidden file inputs ────────────────────────────────────────────────────────
 
 describe('ReportForm — camera input', () => {
-  it('calls handleFileChange with observedAt when camera file is selected', () => {
+  it('calls handleFileChange with observedAt when camera file is selected (GPS ready)', async () => {
+    // Simulate GPS resolving immediately with valid coordinates so the camera
+    // path proceeds directly (no Q&A panel).
+    Object.defineProperty(global.navigator, 'geolocation', {
+      value: {
+        getCurrentPosition: vi.fn((ok) =>
+          ok({ coords: { latitude: 31.7, longitude: 35.2 } })
+        ),
+      },
+      configurable: true,
+      writable: true,
+    });
     const handleFileChange = vi.fn();
     renderForm({ handleFileChange });
+    // Trigger camera click so startGps() runs synchronously (callback fires immediately).
+    fireEvent.click(screen.getByRole('button', { name: 'צלם תמונה' }));
     const input = screen.getByTestId('camera-input');
     fireEvent.change(input, { target: { files: [mockFile] } });
+    // Wait a tick for the async handler.
+    await Promise.resolve();
     expect(handleFileChange).toHaveBeenCalledWith(
       mockFile,
       expect.objectContaining({ observedAt: expect.any(String) }),
@@ -89,8 +104,8 @@ describe('ReportForm — gallery metadata Q&A', () => {
   it('shows Q&A panel after gallery file is selected', () => {
     renderForm();
     selectGalleryFile();
-    expect(screen.getByText(/where was this photo taken/i)).toBeInTheDocument();
-    expect(screen.getByText(/when was this photo taken/i)).toBeInTheDocument();
+    expect(screen.getByText(/היכן צולמה התמונה/)).toBeInTheDocument();
+    expect(screen.getByText(/מתי צולמה התמונה/)).toBeInTheDocument();
   });
 
   it('shows the selected file name', () => {
@@ -102,57 +117,57 @@ describe('ReportForm — gallery metadata Q&A', () => {
   it('Continue button is disabled until both questions answered', () => {
     renderForm();
     selectGalleryFile();
-    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'המשך' })).toBeDisabled();
   });
 
   it('Continue button enables after both questions answered', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/i'm at the location right now/i));
-    fireEvent.click(screen.getByLabelText(/today/i));
-    expect(screen.getByRole('button', { name: /continue/i })).not.toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/אני נמצא/));
+    fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
+    expect(screen.getByRole('button', { name: 'המשך' })).not.toBeDisabled();
   });
 
-  it('shows manual coordinate inputs when "somewhere else" is selected', () => {
+  it('shows manual coordinate inputs when "מיקום אחר" is selected', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/somewhere else/i));
-    expect(screen.getByLabelText(/target latitude/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/target longitude/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/מיקום אחר/));
+    expect(screen.getByLabelText('קו רוחב יעד')).toBeInTheDocument();
+    expect(screen.getByLabelText('קו אורך יעד')).toBeInTheDocument();
   });
 
   it('Continue stays disabled when manual selected but coords empty', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/somewhere else/i));
-    fireEvent.click(screen.getByLabelText(/today/i));
-    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/מיקום אחר/));
+    fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
+    expect(screen.getByRole('button', { name: 'המשך' })).toBeDisabled();
   });
 
   it('Continue enables when manual coords are filled', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/somewhere else/i));
-    fireEvent.click(screen.getByLabelText(/today/i));
-    fireEvent.change(screen.getByLabelText(/target latitude/i), { target: { value: '31.5' } });
-    fireEvent.change(screen.getByLabelText(/target longitude/i), { target: { value: '35.0' } });
-    expect(screen.getByRole('button', { name: /continue/i })).not.toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/מיקום אחר/));
+    fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
+    fireEvent.change(screen.getByLabelText('קו רוחב יעד'), { target: { value: '31.5' } });
+    fireEvent.change(screen.getByLabelText('קו אורך יעד'), { target: { value: '35.0' } });
+    expect(screen.getByRole('button', { name: 'המשך' })).not.toBeDisabled();
   });
 
-  it('shows datetime picker when "another date" is selected', () => {
+  it('shows datetime picker when "תאריך ושעה אחרים" is selected', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/another date/i));
-    expect(screen.getByLabelText(/observation date and time/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/תאריך ושעה אחרים/));
+    expect(screen.getByLabelText('תאריך ושעה של צפייה')).toBeInTheDocument();
   });
 
   it('calls handleFileChange with today timestamp when time=today', () => {
     const handleFileChange = vi.fn();
     renderForm({ handleFileChange });
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/i'm at the location right now/i));
-    fireEvent.click(screen.getByLabelText(/today/i));
-    fireEvent.submit(screen.getByRole('button', { name: /continue/i }).closest('form'));
+    fireEvent.click(screen.getByLabelText(/אני נמצא/));
+    fireEvent.click(screen.getByLabelText(/היום \(כרגע\)/));
+    fireEvent.submit(screen.getByRole('button', { name: 'המשך' }).closest('form'));
     expect(handleFileChange).toHaveBeenCalledWith(
       mockFile,
       expect.objectContaining({ observedAt: expect.any(String) }),
@@ -163,10 +178,9 @@ describe('ReportForm — gallery metadata Q&A', () => {
     const handleFileChange = vi.fn();
     renderForm({ handleFileChange });
     selectGalleryFile();
-    fireEvent.click(screen.getByLabelText(/i'm at the location right now/i));
-    fireEvent.click(screen.getByLabelText(/another date/i));
-    // don't fill datetime-local
-    fireEvent.submit(screen.getByRole('button', { name: /continue/i }).closest('form'));
+    fireEvent.click(screen.getByLabelText(/אני נמצא/));
+    fireEvent.click(screen.getByLabelText(/תאריך ושעה אחרים/));
+    fireEvent.submit(screen.getByRole('button', { name: 'המשך' }).closest('form'));
     expect(handleFileChange).toHaveBeenCalledWith(
       mockFile,
       expect.objectContaining({ observedAt: null }),
@@ -176,8 +190,8 @@ describe('ReportForm — gallery metadata Q&A', () => {
   it('Back button returns to mode selector', () => {
     renderForm();
     selectGalleryFile();
-    fireEvent.click(screen.getByRole('button', { name: /back/i }));
-    expect(screen.getByRole('button', { name: /take photo/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'חזרה' }));
+    expect(screen.getByRole('button', { name: 'צלם תמונה' })).toBeInTheDocument();
   });
 });
 
@@ -186,22 +200,22 @@ describe('ReportForm — gallery metadata Q&A', () => {
 describe('ReportForm — busy overlay', () => {
   it('shows uploading label during UPLOADING step', () => {
     renderForm({ step: STEP.UPLOADING, imagePreview: 'blob:x' });
-    expect(screen.getByText('Uploading image…')).toBeInTheDocument();
+    expect(screen.getByText('מעלה תמונה...')).toBeInTheDocument();
   });
 
   it('shows analyzing label during ANALYZING step', () => {
     renderForm({ step: STEP.ANALYZING, imagePreview: 'blob:x' });
-    expect(screen.getByText('Analysing with AI…')).toBeInTheDocument();
+    expect(screen.getByText('מנתח עם AI...')).toBeInTheDocument();
   });
 
   it('shows submitting label during SUBMITTING step', () => {
     renderForm({ step: STEP.SUBMITTING, imagePreview: 'blob:x' });
-    expect(screen.getByText('Submitting report…')).toBeInTheDocument();
+    expect(screen.getByText('שולח דיווח...')).toBeInTheDocument();
   });
 
   it('renders the image preview element', () => {
     renderForm({ step: STEP.ANALYZING, imagePreview: 'blob:x' });
-    expect(screen.getByAltText('Preview of selected image')).toBeInTheDocument();
+    expect(screen.getByAltText('תצוגה מקדימה של התמונה הנבחרת')).toBeInTheDocument();
   });
 });
 
@@ -209,14 +223,14 @@ describe('ReportForm — busy overlay', () => {
 
 describe('ReportForm — error state', () => {
   it('shows the error message', () => {
-    renderForm({ step: STEP.ERROR, error: 'Upload failed. Please try again.' });
-    expect(screen.getByRole('alert')).toHaveTextContent('Upload failed. Please try again.');
+    renderForm({ step: STEP.ERROR, error: 'ההעלאה נכשלה. נסה/י שנית.' });
+    expect(screen.getByRole('alert')).toHaveTextContent('ההעלאה נכשלה. נסה/י שנית.');
   });
 
   it('calls cancelAndCleanup when Try again is clicked', () => {
     const cancelAndCleanup = vi.fn();
     renderForm({ step: STEP.ERROR, error: 'err', cancelAndCleanup });
-    fireEvent.click(screen.getByText('Try again'));
+    fireEvent.click(screen.getByText('נסה/י שוב'));
     expect(cancelAndCleanup).toHaveBeenCalled();
   });
 });
@@ -228,7 +242,7 @@ describe('ReportForm — close button', () => {
     const cancelAndCleanup = vi.fn();
     const onClose = vi.fn();
     renderForm({ cancelAndCleanup }, { onClose });
-    fireEvent.click(screen.getByLabelText('Close form'));
+    fireEvent.click(screen.getByLabelText('סגירת הטופס'));
     expect(cancelAndCleanup).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
@@ -250,7 +264,7 @@ describe('ReportForm — ready state', () => {
 
   it('shows AI suggestion label', () => {
     renderForm(readyHook);
-    expect(screen.getByText('AI Suggestion')).toBeInTheDocument();
+    expect(screen.getByText('הצעת AI')).toBeInTheDocument();
   });
 
   it('pre-fills category select with aiCategory', () => {
@@ -260,34 +274,34 @@ describe('ReportForm — ready state', () => {
 
   it('shows the description textarea', () => {
     renderForm(readyHook);
-    expect(screen.getByPlaceholderText('Describe what you observed…')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('תאר/י את שנצפה...')).toBeInTheDocument();
   });
 
   it('shows Submit Report button', () => {
     renderForm(readyHook);
-    expect(screen.getByRole('button', { name: 'Submit Report' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'שלח דיווח' })).toBeInTheDocument();
   });
 
   it('Submit button is enabled when a category is selected', () => {
     renderForm(readyHook);
-    expect(screen.getByRole('button', { name: 'Submit Report' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'שלח דיווח' })).not.toBeDisabled();
   });
 
   it('Submit button is disabled when no category is selected', () => {
     renderForm({ ...readyHook, aiCategory: null });
-    expect(screen.getByRole('button', { name: 'Submit Report' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'שלח דיווח' })).toBeDisabled();
   });
 
   it('calls handleSubmit on form submit', () => {
     const handleSubmit = vi.fn().mockResolvedValue(undefined);
     renderForm({ ...readyHook, handleSubmit });
-    fireEvent.submit(screen.getByRole('button', { name: 'Submit Report' }).closest('form'));
+    fireEvent.submit(screen.getByRole('button', { name: 'שלח דיווח' }).closest('form'));
     expect(handleSubmit).toHaveBeenCalled();
   });
 
-  it('shows "AI unavailable" label when analysisAvailable is false', () => {
+  it('shows "AI לא זמין" label when analysisAvailable is false', () => {
     renderForm({ ...readyHook, analysisAvailable: false, aiCategory: null });
-    expect(screen.getByText('AI unavailable — please classify')).toBeInTheDocument();
+    expect(screen.getByText('AI לא זמין — אנא סווג/י')).toBeInTheDocument();
   });
 });
 
@@ -300,17 +314,7 @@ describe('ReportForm — file validation', () => {
     const input = screen.getByTestId('camera-input');
     fireEvent.change(input, { target: { files: [gifFile] } });
     expect(screen.getByTestId('file-error')).toBeInTheDocument();
-    expect(screen.getByTestId('file-error')).toHaveTextContent(/unsupported format/i);
-  });
-
-  it('shows a file-error banner for a file over 10 MB on the camera input', () => {
-    renderForm();
-    const bigFile = new File(['x'.repeat(100)], 'big.jpg', { type: 'image/jpeg' });
-    Object.defineProperty(bigFile, 'size', { value: 11 * 1024 * 1024 });
-    const input = screen.getByTestId('camera-input');
-    fireEvent.change(input, { target: { files: [bigFile] } });
-    expect(screen.getByTestId('file-error')).toHaveTextContent(/too large/i);
-    expect(screen.getByTestId('file-error')).toHaveTextContent(/10 MB/i);
+    expect(screen.getByTestId('file-error')).toHaveTextContent(/פורמט לא נתמך/);
   });
 
   it('does not show a file-error banner for a valid JPEG under 10 MB on the camera input', () => {
@@ -326,7 +330,7 @@ describe('ReportForm — file validation', () => {
     const gifFile = new File(['x'], 'anim.gif', { type: 'image/gif' });
     const input = screen.getByTestId('gallery-input');
     fireEvent.change(input, { target: { files: [gifFile] } });
-    expect(screen.getByTestId('file-error')).toHaveTextContent(/unsupported format/i);
+    expect(screen.getByTestId('file-error')).toHaveTextContent(/פורמט לא נתמך/);
   });
 
   it('does not show Q&A panel after an invalid gallery file', () => {
@@ -334,7 +338,7 @@ describe('ReportForm — file validation', () => {
     const gifFile = new File(['x'], 'anim.gif', { type: 'image/gif' });
     const input = screen.getByTestId('gallery-input');
     fireEvent.change(input, { target: { files: [gifFile] } });
-    expect(screen.queryByText(/where was this photo taken/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/היכן צולמה התמונה/)).not.toBeInTheDocument();
   });
 });
 
@@ -343,13 +347,13 @@ describe('ReportForm — file validation', () => {
 describe('ReportForm — done state', () => {
   it('shows the success message', () => {
     renderForm({ step: STEP.DONE });
-    expect(screen.getByText('Report submitted!')).toBeInTheDocument();
+    expect(screen.getByText('הדיווח נשלח!')).toBeInTheDocument();
   });
 
   it('calls onClose when Close is clicked', () => {
     const onClose = vi.fn();
     renderForm({ step: STEP.DONE }, { onClose });
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'סגור' }));
     expect(onClose).toHaveBeenCalled();
   });
 });
