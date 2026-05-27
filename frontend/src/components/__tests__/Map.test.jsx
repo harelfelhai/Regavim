@@ -20,14 +20,15 @@ vi.mock('react-leaflet', () => {
     <div data-testid={testId ?? 'map-container'}>{children}</div>
   );
   const TileLayer = () => null;
-  const Marker = ({ children, 'data-testid': testId }) => (
-    <div data-testid={testId ?? 'marker'}>{children}</div>
+  const Marker = ({ children, eventHandlers, 'data-testid': testId }) => (
+    <div data-testid={testId ?? 'marker'} onClick={() => eventHandlers?.click?.()}>
+      {children}
+    </div>
   );
-  const Popup = ({ children }) => <div>{children}</div>;
   const LayersControl = ({ children }) => <div>{children}</div>;
   LayersControl.BaseLayer = ({ children }) => <div>{children}</div>;
   const useMap = () => ({ panTo: vi.fn(), setView: vi.fn() });
-  return { MapContainer, TileLayer, Marker, Popup, LayersControl, useMap };
+  return { MapContainer, TileLayer, Marker, LayersControl, useMap };
 });
 
 const VALID_REPORT = {
@@ -93,14 +94,17 @@ describe('Map — coordinate filtering', () => {
   });
 });
 
-describe('Map — popup content', () => {
-  it('shows report description in the popup', () => {
-    render(<Map reports={[VALID_REPORT]} />);
-    expect(screen.getByText('Test report')).toBeInTheDocument();
+describe('Map — marker interaction', () => {
+  it('calls onSelectReport with the report when its marker is clicked', () => {
+    const onSelect = vi.fn();
+    render(<Map reports={[VALID_REPORT]} onSelectReport={onSelect} />);
+    screen.getByTestId('report-marker').click();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(VALID_REPORT);
   });
 
-  it('shows "No description" when description is null', () => {
-    render(<Map reports={[{ ...VALID_REPORT, description: null }]} />);
-    expect(screen.getByText(/no description/i)).toBeInTheDocument();
+  it('does not crash when no onSelectReport prop is supplied', () => {
+    render(<Map reports={[VALID_REPORT]} />);
+    expect(() => screen.getByTestId('report-marker').click()).not.toThrow();
   });
 });

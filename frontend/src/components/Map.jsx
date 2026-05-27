@@ -3,7 +3,6 @@ import {
   MapContainer,
   TileLayer,
   Marker,
-  Popup,
   LayersControl,
   useMap,
 } from 'react-leaflet';
@@ -24,20 +23,29 @@ const ESRI_ATTR =
   'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
 
 const STATUS_COLOR = {
-  pending:   '#f59e0b', // amber-400  — needs action
-  confirmed: '#2563eb', // regavim-blue — coordinator reviewed
-  approved:  '#22c55e', // green-500  — manager approved
-  rejected:  '#9ca3af', // gray-400   — dismissed
+  pending:            '#f59e0b', // amber-400  — needs action
+  confirmed:          '#2563eb', // regavim-blue — coordinator reviewed
+  approved:           '#22c55e', // green-500  — manager approved
+  rejected:           '#9ca3af', // gray-400   — dismissed
+  deletion_requested: '#dc2626', // red-600    — pending deletion review
 };
 
-function createMarkerIcon(status) {
+function createMarkerIcon(status, isSelected = false) {
   const color = STATUS_COLOR[status] ?? STATUS_COLOR.pending;
+  const size = isSelected ? 26 : 20;
+  const ring = isSelected ? 4 : 3;
   return L.divIcon({
-    className: '',
-    html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></span>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-    popupAnchor: [0, -10],
+    className: 'regavim-marker',
+    html: `<span style="
+      display:block;width:${size}px;height:${size}px;border-radius:50%;
+      background:${color};border:${ring}px solid #fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.4);
+      transition:transform .15s ease;
+      ${isSelected ? 'transform:scale(1.15);' : ''}
+    "></span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
   });
 }
 
@@ -65,7 +73,12 @@ function isMappable(report) {
   );
 }
 
-export default function Map({ reports = [], panTarget = null }) {
+export default function Map({
+  reports = [],
+  panTarget = null,
+  selectedReportId = null,
+  onSelectReport = null,
+}) {
   const mappable = reports.filter(isMappable);
 
   return (
@@ -88,18 +101,12 @@ export default function Map({ reports = [], panTarget = null }) {
         <Marker
           key={report.id}
           position={[report.target_lat, report.target_lng]}
-          icon={createMarkerIcon(report.status)}
+          icon={createMarkerIcon(report.status, report.id === selectedReportId)}
           data-testid="report-marker"
-        >
-          <Popup>
-            <div className="text-sm min-w-[160px]">
-              <p className="font-semibold text-gray-800 mb-1">
-                {report.description || 'No description'}
-              </p>
-              <p className="capitalize text-gray-500">{report.status}</p>
-            </div>
-          </Popup>
-        </Marker>
+          eventHandlers={{
+            click: () => onSelectReport?.(report),
+          }}
+        />
       ))}
 
       <MapController panTarget={panTarget} />

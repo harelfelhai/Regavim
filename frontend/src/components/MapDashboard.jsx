@@ -119,7 +119,12 @@ export default function MapDashboard() {
 
       {/* ── Map ─────────────────────────────────────────────────────────── */}
       <main className="flex-1 h-full relative">
-        <Map reports={reports} panTarget={panTarget} />
+        <Map
+          reports={reports}
+          panTarget={panTarget}
+          selectedReportId={selectedReportId}
+          onSelectReport={handleSelectReport}
+        />
 
         {/* ── Report Form Modal ──────────────────────────────────────────── */}
         {showForm && (
