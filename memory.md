@@ -24,19 +24,26 @@ An NGO field-reporting tool that lets coordinators document illegal construction
 
 | Layer | Technology | Notes |
 |---|---|---|
-| Frontend | React 19 (PWA) | Mobile-first; offline-capable via service worker |
-| Frontend build | Vite 6 | Dev server + production bundler |
+| Frontend | React 19 (PWA) | Mobile-first |
+| Frontend build | Vite 8 | Requires Node ^20.19.0 or >=22.12.0; prod bundler |
 | Frontend styling | Tailwind CSS v3 | Utility-first; responsive mobile-first classes |
-| Frontend state | Zustand | Lightweight global store; no boilerplate |
-| Frontend HTTP | Axios | Centralized instance in `services/api.js` |
-| Frontend testing | Vitest + React Testing Library | Vite-native; MSW for HTTP mocking |
+| Frontend state | Zustand | Lightweight global store with `persist` middleware |
+| Frontend HTTP | Axios | Centralized instance in `services/api.js` with request/response interceptors |
+| Frontend testing | Vitest + React Testing Library | Vite-native; vi.mock for unit tests |
+| Frontend routing | React Router v7 | BrowserRouter; `/login` public, `/*` protected |
 | Backend | Python + FastAPI | Async, RESTful API |
 | ORM | SQLAlchemy | Declarative models; DB-agnostic |
+| Migrations | Alembic | `alembic upgrade head` in Render start command |
 | DB (dev) | SQLite | Zero-config local development |
-| DB (prod) | PostgreSQL | Target production database |
-| AI | Anthropic Claude API | Image analysis + category suggestion |
-| Maps | TBD (Leaflet.js or Mapbox GL JS) | To be decided in Phase C |
-| Auth | TBD | JWT is the likely approach; Stage 7 |
+| DB (prod) | PostgreSQL (Neon free tier) | Neon serverless PostgreSQL; `psycopg2-binary` driver |
+| Image storage (dev) | Local filesystem | `LocalStorageProvider`; files in `uploads/` |
+| Image storage (prod) | Cloudinary CDN | `CloudinaryStorageProvider`; activated when all 3 Cloudinary env vars are set |
+| AI | Anthropic Claude API | Image analysis + category suggestion; model `claude-sonnet-4-6` |
+| Maps | Leaflet.js + react-leaflet | OSM + Esri satellite layer switcher; div-icon markers |
+| Auth | JWT (HS256) | Bearer tokens; 24h expiry; sessionStorage persistence |
+| CI/CD | GitHub Actions | `.github/workflows/ci.yml`; runs on every push; deploys to Render on main |
+| Frontend hosting | Vercel | Configured entirely via root `vercel.json`; Node 22 required |
+| Backend hosting | Render (manual web service) | Free tier; no Blueprint (requires credit card); manual env vars in dashboard |
 
 ---
 
@@ -381,6 +388,10 @@ Responses:
 | D | Frontend — Phase C: ReportForm + Phase D: Detail/Filters | **Done** |
 | E2 | Frontend JWT authentication | **Done** |
 | F | Final Integration & Usability (MVP) | **Done** |
+| C | Session C Bug Fixes (error classification + file validation) | **Done** |
+| DEL | Deletion Request System | **Done** |
+| SPU | Smart Photo Upload (Camera vs Gallery modes) | **Done** |
+| INF | Infrastructure: PostgreSQL + Alembic + Cloudinary + CI/CD + Deploy | **Done** |
 
 ---
 
@@ -1290,4 +1301,193 @@ App mounts — reads token from sessionStorage (via Zustand persist)
 Key guarantee: the protected `/map` route is never rendered while the token
 verification is in flight. The spinner blocks all routes until `bootstrapped`
 is `true`, so there is no flash of authenticated UI before the check resolves.
+
+---
+
+## 28. Session C — Bug Fix Completion Summary
+
+### Problem Fixed
+Axios error classification was conflating timeout and network errors, and the image upload service had no client-side file validation.
+
+### What Was Built / Changed
+
+| File | Change |
+|---|---|
+| `frontend/src/services/api.js` | Response interceptor extended: `ECONNABORTED`/`ERR_CANCELED` codes → `error.isTimeout = true` (not `isNetworkError`); HTTP 413 → `error.message` set to `error.response.data?.detail` or fallback |
+| `frontend/src/services/images.js` | `uploadImage()` passes `{ timeout: 60_000 }` as 3rd arg to `api.post()`; `MAX_FILE_BYTES = 10_485_760` and `ACCEPTED_TYPES` validated before the API call |
+| `frontend/src/services/__tests__/api.interceptors.test.js` | New tests: ECONNABORTED → `isTimeout` (not `isNetworkError`); ERR_CANCELED → `isTimeout`; 413 with server detail; 413 without server detail |
+| `frontend/src/services/__tests__/images.test.js` | Updated upload test to assert 3-arg call with `{ timeout: 60_000 }` |
+| `frontend/src/components/__tests__/ReportForm.test.jsx` | New suite: unsupported MIME type → file-error banner; file >10 MB → banner; valid JPEG → no banner; gallery invalid file → no Q&A panel |
+
+### Test Results — 215 backend / 227 frontend (all passing, no regressions)
+
+### Key Design Decisions
+- `ECONNABORTED` and `ERR_CANCELED` both map to `isTimeout = true`; `isNetworkError = true` is only set when `!error.response` AND no timeout code
+- 60-second upload timeout chosen to accommodate large TIFF images on mobile connections
+- `MAX_FILE_BYTES = 10 * 1024 * 1024` (exactly 10 MiB); `ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/tiff'])`
+
+---
+
+## 29. Deletion Request System — Completion Summary
+
+### What Was Built
+
+| File | Change |
+|---|---|
+| `backend/core/constants.py` | Added `DELETION_REQUESTED = "deletion_requested"` to `ReportStatus` |
+| `backend/api/v1/reports.py` | New `PATCH /api/v1/reports/{id}/request-deletion` endpoint: sets status to `deletion_requested`; only the report owner or admin may call it; 403 otherwise |
+| `frontend/src/components/ReportDetailPanel.jsx` | "Request Deletion" button: visible only when the logged-in user is the report owner (or admin); hidden for `approved`, `rejected`, `deletion_requested` statuses; two-click confirmation guard (first click → confirm mode; second click → API call) |
+| `frontend/src/hooks/useReportDetail.js` | Added `requestDeletion()` action: calls `patchReport(id, { status: 'deletion_requested' })`; updates local state; calls `onPatched()` to refresh the list |
+
+### Status Color Coding Update
+`deletion_requested` → `bg-red-100 text-red-600` (red) — visually distinct from all other statuses.
+
+### Business Rules
+- **Who can request**: The coordinator who created the report, or any admin.
+- **When it's blocked**: Reports with status `approved`, `rejected`, or already `deletion_requested` — the button is hidden.
+- **What it does**: Sets `status = deletion_requested`. No data is deleted. A manager can review and then actually reject/delete.
+- **Guard pattern**: Button shows confirmation text on first click; second click within the same render fires the API. Click-away or navigation resets the guard.
+
+---
+
+## 30. Smart Photo Upload — Completion Summary
+
+### What Was Built
+
+The report creation flow was split into two explicit photo modes, replacing the single file input.
+
+| File | Change |
+|---|---|
+| `frontend/src/components/ReportForm.jsx` | Two separate `<input>` elements: `camera-input` (`capture="environment"`) and `gallery-input`; two buttons (camera icon + gallery icon); `captureMode` state `'camera' | 'gallery' | null` |
+| `frontend/src/components/ReportForm.jsx` | **Camera mode**: `capture="environment"` triggers device camera; GPS coordinates and timestamp come from the EXIF the device embeds automatically; form proceeds directly to upload |
+| `frontend/src/components/ReportForm.jsx` | **Gallery mode**: After file selection, a Q&A panel slides in asking two questions: (1) Does the photo contain GPS location? (2) Does the photo contain the original timestamp? If user answers No to location → they must pin the target on the map; if No to timestamp → they must enter `observed_at` manually |
+| `frontend/src/components/ReportForm.jsx` | `pendingGalleryFile` state holds the file until Q&A is completed; `galleryAnswers` `{ hasLocation: bool, hasTimestamp: bool }` drives what metadata fields are shown |
+| `frontend/src/hooks/useReportForm.js` | `observed_at` field accepted and forwarded to `createReport()` payload |
+| `backend/models/report.py` | `observed_at: Mapped[datetime | None]` — when the violation was photographed (may differ from `created_at`) |
+| `backend/schemas/report.py` | `observed_at: datetime | None` in `ReportCreate` and `ReportRead` |
+
+### Mode Comparison
+
+| | Camera Mode | Gallery Mode |
+|---|---|---|
+| Input `capture` attribute | `environment` | absent |
+| EXIF GPS assumed present | Yes (device writes it) | Q&A gate |
+| EXIF timestamp assumed present | Yes | Q&A gate |
+| `observed_at` | From EXIF DateTimeOriginal | User enters if no EXIF timestamp |
+| Location pin required | Only if user overrides | Only if user says no GPS |
+
+### File Validation (both modes)
+- Max size: 10 MiB (`MAX_FILE_BYTES`)
+- Accepted types: `image/jpeg`, `image/png`, `image/tiff`
+- Invalid file → error banner shown; Q&A panel is NOT opened for gallery mode
+
+---
+
+## 31. Infrastructure & Deployment — Completion Summary
+
+### Database Migration: SQLite → PostgreSQL + Alembic
+
+| File | Change |
+|---|---|
+| `backend/requirements.txt` | Added `alembic>=1.13.0`, `psycopg2-binary>=2.9.9` |
+| `backend/core/config.py` | `DATABASE_URL` now defaults to `sqlite:///./regavim.db`; set to Neon PostgreSQL URL in production via env var |
+| `alembic.ini` | Repo root; `script_location = backend/alembic`; `prepend_sys_path = .` |
+| `backend/alembic/env.py` | Reads `settings.DATABASE_URL`; imports `backend.models` to register all ORM models; uses `Base.metadata` as target |
+| `backend/alembic/versions/0001_initial_schema.py` | Creates `users`, `reports` (all columns including `observed_at`), `images` tables |
+
+**Key**: `backend/main.py` was updated to remove `Base.metadata.create_all()` from the lifespan — Alembic owns schema management now.
+
+### Cloudinary Storage Integration
+
+| File | Change |
+|---|---|
+| `backend/core/config.py` | Added `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (all default `""`) |
+| `backend/requirements.txt` | Added `cloudinary>=1.40.0` |
+| `backend/services/storage.py` | Complete rewrite: `StorageProvider` ABC with `save/delete/read/public_url`; `LocalStorageProvider` for dev; `CloudinaryStorageProvider` for production |
+| `backend/api/v1/images.py` | `get_storage()` FastAPI dependency: activates `CloudinaryStorageProvider` when all 3 Cloudinary env vars are set, otherwise `LocalStorageProvider`; `GET /{id}/file` now returns `RedirectResponse(302)` to CDN URL when Cloudinary is active |
+
+**Cloudinary activation**: automatic — no code change needed. Set the three env vars on Render and the storage provider switches at startup.
+
+### CORS Configuration
+
+| File | Change |
+|---|---|
+| `backend/core/config.py` | `ALLOWED_ORIGINS: str = "*"` — comma-separated list or `"*"` wildcard |
+| `backend/main.py` | `_origins` computed from `settings.ALLOWED_ORIGINS`; `allow_credentials=False` when wildcard is used |
+
+### CI/CD Pipeline
+
+`.github/workflows/ci.yml` — runs on every push and PR:
+1. **Backend tests** (`test-backend`): checkout → Python 3.11 → `pip install` → `pytest --tb=short`
+2. **Frontend tests** (`test-frontend`): checkout → Node 20 → `npm ci` in `frontend/` → `npm test -- --run`
+3. **Deploy** (`deploy`): runs on `main` pushes only after both test jobs pass; triggers Render deploy hook via `curl` (uses `RENDER_DEPLOY_HOOK_URL` repository secret)
+
+### Vercel Frontend Deployment
+
+`vercel.json` (repo root):
+```json
+{
+  "installCommand": "npm install --prefix frontend",
+  "buildCommand": "npm --prefix frontend run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+`.node-version: 22` at repo root + `"engines": {"node": ">=22.12.0"}` in `frontend/package.json` — forces Vercel to use Node 22 (required by Vite 8).
+
+**Critical**: Do NOT use `cd frontend &&` in Vercel commands — it tries to `cd` from repo root, but Vercel runs from repo root already. Use `--prefix frontend` instead.
+
+### Render Backend Deployment (Manual Web Service)
+
+**Not using Blueprint** (Blueprint requires credit card on free tier).
+
+| Setting | Value |
+|---|---|
+| Build Command | `pip install -r backend/requirements.txt` |
+| Start Command | `alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/health` |
+
+**All from repo root** — do NOT `cd backend` as it breaks Alembic's `alembic.ini` lookup.
+
+Required environment variables set manually in Render dashboard:
+- `DATABASE_URL` — Neon PostgreSQL connection string
+- `ANTHROPIC_API_KEY`
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+- `SECRET_KEY` — random strong secret
+- `ALLOWED_ORIGINS` — Vercel frontend URL (e.g. `https://regavim.vercel.app`)
+- `ACCESS_TOKEN_EXPIRE_MINUTES` — `1440` (24h)
+- `UPLOAD_DIR` — `/tmp/uploads`
+
+### First-Time Admin User Bootstrap
+
+After the backend is deployed and database is migrated:
+```bash
+DATABASE_URL=<neon-url> python backend/create_admin.py --email admin@example.com --password <strong-password>
+```
+
+---
+
+## 32. Current State (as of 2026-05-27)
+
+### Test Suite
+- **Backend**: 215 tests — all passing (`pytest --tb=short`)
+- **Frontend**: 227 tests across 17 test files — all passing (`npm test -- --run`)
+
+### Pending / Next Steps
+
+| Priority | Item |
+|---|---|
+| High | **RBAC enforcement** — `current_user.role` is stored but never checked. Add `require_role("manager")` guards to PATCH/DELETE endpoints; only coordinators should create reports |
+| High | **Verify live deployments** — confirm Render `/health` returns 200; confirm Vercel build succeeds with Node 22 setting |
+| Medium | **Token refresh** — `POST /api/v1/auth/refresh` stub not implemented; tokens expire after 24h requiring re-login |
+| Medium | **Pagination** on `GET /api/v1/reports/` — add `limit`/`offset` query params before the list grows large |
+| Low | **Rate limiting** on `/login` — brute-force protection needed before production |
+| Low | **PWA manifest** + service worker — installable app with offline read-only access |
+| Low | **GIS land context** — `land_context` field is always `NULL`; intersection with legal land layer is a future integration |
+
+### Known Limitations
+- JWT tokens cannot be individually revoked before expiry (stateless design tradeoff)
+- Soft-deleted reports (`status=rejected`) are not physically removed; `StorageProvider.delete()` is implemented but not wired to soft-delete
+- No search/full-text filter on report description
+- `land_context` always `NULL`
 
