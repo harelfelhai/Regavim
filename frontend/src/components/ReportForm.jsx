@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
   Camera,
   Images,
@@ -142,16 +142,40 @@ export default function ReportForm({ onClose, onSubmitted }) {
     const validationError = validateFile(file);
     if (validationError) { setFileError(validationError); return; }
     setFileError(null);
-    const lat = gpsCoords?.lat ?? null;
-    const lng = gpsCoords?.lng ?? null;
+
+    if (gpsStatus === 'ready') {
+      handleFileChange(file, {
+        userLat:   gpsCoords.lat,
+        userLng:   gpsCoords.lng,
+        targetLat: gpsCoords.lat,
+        targetLng: gpsCoords.lng,
+        observedAt: new Date().toISOString(),
+      });
+    } else {
+      // GPS still loading or failed — park the file and show location Q&A.
+      // Time is always "now" for a freshly taken photo.
+      setPendingFile(file);
+      setTimeChoice('today');
+      setLocationChoice(null);
+      setManualLat('');
+      setManualLng('');
+    }
+  }
+
+  // Auto-proceed when GPS resolves while a camera photo is parked (user hasn't
+  // touched the location picker yet — if they have, let them finish manually).
+  useEffect(() => {
+    if (captureMode !== 'camera' || !pendingFile || gpsStatus !== 'ready' || locationChoice !== null) return;
+    const file = pendingFile;
+    const lat  = gpsCoords.lat;
+    const lng  = gpsCoords.lng;
+    setPendingFile(null);
     handleFileChange(file, {
-      userLat:    lat,
-      userLng:    lng,
-      targetLat:  lat,
-      targetLng:  lng,
+      userLat: lat, userLng: lng,
+      targetLat: lat, targetLng: lng,
       observedAt: new Date().toISOString(),
     });
-  }
+  }, [captureMode, pendingFile, gpsStatus, gpsCoords, handleFileChange, locationChoice]);
 
   // ── Gallery mode ─────────────────────────────────────────────────────────────
   function handleGalleryClick() {
@@ -303,13 +327,25 @@ export default function ReportForm({ onClose, onSubmitted }) {
         </div>
       )}
 
-      {/* ── Phase 2: Gallery metadata Q&A ────────────────────────────────────── */}
+      {/* ── Phase 2: Metadata Q&A (gallery always; camera only when GPS unavailable) */}
       {step === STEP.IDLE && pendingFile && (
         <form onSubmit={handleMetadataSubmit} className="flex flex-col gap-5 px-6 py-5">
           {/* Selected file name */}
           <div className="flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-600">
-            <Images size={14} className="flex-shrink-0 text-regavim-blue" />
-            <span className="truncate">{pendingFile.name}</span>
+            {captureMode === 'camera' ? (
+              <Camera size={14} className="flex-shrink-0 text-regavim-blue" />
+            ) : (
+              <Images size={14} className="flex-shrink-0 text-regavim-blue" />
+            )}
+            <span className="truncate">
+              {captureMode === 'camera' ? 'Photo captured' : pendingFile.name}
+            </span>
+            {captureMode === 'camera' && gpsStatus === 'loading' && (
+              <span className="ml-auto flex items-center gap-1 text-gray-400">
+                <Loader2 size={11} className="animate-spin" />
+                <span>GPS…</span>
+              </span>
+            )}
           </div>
 
           {/* Location question */}
@@ -386,49 +422,51 @@ export default function ReportForm({ onClose, onSubmitted }) {
             )}
           </div>
 
-          {/* Time question */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 text-regavim-blue">
-              <Clock size={14} />
-              <p className="text-xs font-semibold uppercase tracking-wide">
-                When was this photo taken?
-              </p>
+          {/* Time question — hidden for camera (always "now") */}
+          {captureMode !== 'camera' && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-regavim-blue">
+                <Clock size={14} />
+                <p className="text-xs font-semibold uppercase tracking-wide">
+                  When was this photo taken?
+                </p>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="time"
+                  value="today"
+                  checked={timeChoice === 'today'}
+                  onChange={() => setTimeChoice('today')}
+                  className="accent-regavim-blue"
+                />
+                <span className="text-sm text-gray-700">Today (right now)</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="time"
+                  value="custom"
+                  checked={timeChoice === 'custom'}
+                  onChange={() => setTimeChoice('custom')}
+                  className="accent-regavim-blue"
+                />
+                <span className="text-sm text-gray-700">Another date &amp; time</span>
+              </label>
+
+              {timeChoice === 'custom' && (
+                <input
+                  type="datetime-local"
+                  value={customDateTime}
+                  onChange={(e) => setCustomDateTime(e.target.value)}
+                  aria-label="Observation date and time"
+                  className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
+                />
+              )}
             </div>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="time"
-                value="today"
-                checked={timeChoice === 'today'}
-                onChange={() => setTimeChoice('today')}
-                className="accent-regavim-blue"
-              />
-              <span className="text-sm text-gray-700">Today (right now)</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="time"
-                value="custom"
-                checked={timeChoice === 'custom'}
-                onChange={() => setTimeChoice('custom')}
-                className="accent-regavim-blue"
-              />
-              <span className="text-sm text-gray-700">Another date &amp; time</span>
-            </label>
-
-            {timeChoice === 'custom' && (
-              <input
-                type="datetime-local"
-                value={customDateTime}
-                onChange={(e) => setCustomDateTime(e.target.value)}
-                aria-label="Observation date and time"
-                className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
-              />
-            )}
-          </div>
+          )}
 
           {/* Q&A actions */}
           <div className="flex gap-2">
