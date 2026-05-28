@@ -1,9 +1,15 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { X, Tag } from 'lucide-react';
 import { fetchTags } from '../services/reports';
 
 /**
  * Free-text tag chip input with server-side autocomplete.
+ *
+ * Exposes a `commitPending()` imperative handle via forwardRef so a parent
+ * form can flush any uncommitted typed text before submission without waiting
+ * for the user to press Enter.  commitPending() returns the resulting tag
+ * array (or null when there was nothing to commit) so the caller can use the
+ * up-to-date value synchronously before React re-renders.
  *
  * @param {Object}   props
  * @param {string[]} props.value       - Current tag list (controlled)
@@ -11,7 +17,7 @@ import { fetchTags } from '../services/reports';
  * @param {string}   [props.placeholder]
  * @param {boolean}  [props.disabled]
  */
-export default function TagInput({ value = [], onChange, placeholder = 'הוסף תגית...', disabled = false }) {
+const TagInput = forwardRef(function TagInput({ value = [], onChange, placeholder = 'הוסף תגית...', disabled = false }, ref) {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -43,6 +49,21 @@ export default function TagInput({ value = [], onChange, placeholder = 'הוסף
   useEffect(() => {
     return () => clearTimeout(debounceRef.current);
   }, []);
+
+  // Flush any uncommitted typed text as a new tag. Returns the resulting tag
+  // array so the caller can use it synchronously (before React re-renders),
+  // or null when there was nothing pending.
+  useImperativeHandle(ref, () => ({
+    commitPending() {
+      const tag = inputValue.trim().replace(/,+$/, '').trim();
+      if (!tag || value.includes(tag)) return null;
+      const next = [...value, tag];
+      onChange(next);
+      setInputValue('');
+      setSuggestions([]);
+      return next;
+    },
+  }), [inputValue, value, onChange]);
 
   function addTag(raw) {
     const tag = raw.trim().replace(/,+$/, '').trim();
@@ -155,4 +176,6 @@ export default function TagInput({ value = [], onChange, placeholder = 'הוסף
       )}
     </div>
   );
-}
+});
+
+export default TagInput;

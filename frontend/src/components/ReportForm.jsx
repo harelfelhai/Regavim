@@ -97,6 +97,7 @@ const STEP_LABEL = {
 export default function ReportForm({ onClose, onSubmitted, initialTarget = null }) {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const tagInputRef = useRef(null);
 
   const [description, setDescription] = useState('');
   const [finalCategory, setFinalCategory] = useState('');
@@ -307,7 +308,10 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
   // ── Submit pipeline result ───────────────────────────────────────────────────
   async function onSubmit(e) {
     e.preventDefault();
-    await handleSubmit({ description, finalCategory: displayedCategory || null, tags });
+    // Flush any text still in the tag input (user typed but didn't press Enter).
+    const committed = tagInputRef.current?.commitPending();
+    const finalTags = committed ?? tags;
+    await handleSubmit({ description, finalCategory: displayedCategory || null, tags: finalTags });
     if (step !== STEP.ERROR) onSubmitted?.();
   }
 
@@ -603,7 +607,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   תגיות <span className="font-normal text-gray-400">(לקיבוץ פרשיות)</span>
                 </label>
-                <TagInput value={tags} onChange={setTags} />
+                <TagInput ref={tagInputRef} value={tags} onChange={setTags} />
               </div>
 
               <button

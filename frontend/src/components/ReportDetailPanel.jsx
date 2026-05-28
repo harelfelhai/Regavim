@@ -82,13 +82,11 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const [confirmValue, setConfirmValue] = useState('');
   const [deletionConfirmed, setDeletionConfirmed] = useState(false);
   const [localTags, setLocalTags] = useState(null); // null = follow report.tags
-  const [tagsDirty, setTagsDirty] = useState(false);
 
   useEffect(() => {
     setConfirmValue('');
     setDeletionConfirmed(false);
     setLocalTags(null);
-    setTagsDirty(false);
   }, [reportId]);
 
   const {
@@ -229,26 +227,11 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
         <div>
           <p className="text-xs text-gray-400 mb-1">תגיות</p>
           {canConfirm ? (
-            <div className="space-y-1.5">
-              <TagInput
-                value={displayTags}
-                onChange={(t) => { setLocalTags(t); setTagsDirty(true); }}
-                placeholder="הוסף תגית לפרשייה..."
-              />
-              {tagsDirty && (
-                <button
-                  type="button"
-                  disabled={patching}
-                  onClick={async () => {
-                    const ok = await saveTags(displayTags);
-                    if (ok) setTagsDirty(false);
-                  }}
-                  className="text-xs text-regavim-blue hover:underline disabled:opacity-50"
-                >
-                  {patching ? 'שומר...' : 'שמור תגיות'}
-                </button>
-              )}
-            </div>
+            <TagInput
+              value={displayTags}
+              onChange={(t) => { setLocalTags(t); saveTags(t); }}
+              placeholder="הוסף תגית לפרשייה..."
+            />
           ) : displayTags.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {displayTags.map((t) => (
