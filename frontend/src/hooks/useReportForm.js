@@ -112,9 +112,11 @@ export function useReportForm() {
       // The image is now linked — clear so cleanup never deletes it.
       setImageId(null);
       setStep(STEP.DONE);
+      return true;
     } catch (err) {
       setError(err?.message ?? 'השליחה נכשלה. נסה/י שנית.');
       setStep(STEP.ERROR);
+      return false;
     }
   }
 

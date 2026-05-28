@@ -103,6 +103,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
   const [finalCategory, setFinalCategory] = useState('');
   const [tags, setTags] = useState([]);
   const [fileError, setFileError] = useState(null);
+  const [descriptionError, setDescriptionError] = useState(null);
   const [isCompressing, setIsCompressing] = useState(false);
 
   // Capture mode: 'camera' | 'gallery' | null
@@ -183,6 +184,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
     setFinalCategory('');
     setTags([]);
     setFileError(null);
+    setDescriptionError(null);
     setIsCompressing(false);
     setCaptureMode(null);
     setPendingFile(null);
@@ -308,11 +310,17 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
   // ── Submit pipeline result ───────────────────────────────────────────────────
   async function onSubmit(e) {
     e.preventDefault();
+    // A category means the report is immediately "confirmed" — description required.
+    if (displayedCategory && !description.trim()) {
+      setDescriptionError('נדרש תיאור לדיווח מאושר.');
+      return;
+    }
+    setDescriptionError(null);
     // Flush any text still in the tag input (user typed but didn't press Enter).
     const committed = tagInputRef.current?.commitPending();
     const finalTags = committed ?? tags;
-    await handleSubmit({ description, finalCategory: displayedCategory || null, tags: finalTags });
-    if (step !== STEP.ERROR) onSubmitted?.();
+    const ok = await handleSubmit({ description, finalCategory: displayedCategory || null, tags: finalTags });
+    if (ok) onSubmitted?.();
   }
 
   // ── Done ─────────────────────────────────────────────────────────────────────
@@ -591,16 +599,19 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
 
               <div>
                 <label htmlFor="description" className="block text-xs font-medium text-gray-600 mb-1">
-                  תיאור
+                  תיאור{displayedCategory && <span className="text-red-500 mr-0.5">*</span>}
                 </label>
                 <textarea
                   id="description"
                   rows={3}
                   placeholder="תאר/י את שנצפה..."
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
+                  onChange={(e) => { setDescription(e.target.value); if (descriptionError) setDescriptionError(null); }}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-regavim-blue/40 ${descriptionError ? 'border-red-400' : 'border-gray-200'}`}
                 />
+                {descriptionError && (
+                  <p role="alert" className="mt-1 text-xs text-red-600">{descriptionError}</p>
+                )}
               </div>
 
               <div>

@@ -328,8 +328,10 @@ describe('ReportForm — ready state', () => {
   });
 
   it('calls handleSubmit on form submit', () => {
-    const handleSubmit = vi.fn().mockResolvedValue(undefined);
+    const handleSubmit = vi.fn().mockResolvedValue(true);
     renderForm({ ...readyHook, handleSubmit });
+    // Category is pre-filled (ROAD_PAVING), so description is required.
+    fireEvent.change(screen.getByPlaceholderText('תאר/י את שנצפה...'), { target: { value: 'test description' } });
     fireEvent.submit(screen.getByRole('button', { name: 'שלח דיווח' }).closest('form'));
     expect(handleSubmit).toHaveBeenCalled();
   });
