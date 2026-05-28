@@ -26,6 +26,7 @@ class ReportCreate(BaseModel):
     target_lat: Optional[float] = None
     target_lng: Optional[float] = None
     land_context: Optional[str] = None
+    tags: list[str] = []
 
     @field_validator("user_lat", "target_lat")
     @classmethod
@@ -54,6 +55,7 @@ class ReportUpdate(BaseModel):
     final_category: Optional[ViolationCategory] = None
     description: Optional[str] = None
     land_context: Optional[str] = None
+    tags: Optional[list[str]] = None
 
 
 class ReportRead(BaseModel):
@@ -75,4 +77,11 @@ class ReportRead(BaseModel):
     user_lng: Optional[float] = None
     target_lat: Optional[float] = None
     target_lng: Optional[float] = None
+    tags: list[str] = []
     image_ids: list[str] = []
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def coerce_null_tags(cls, v: object) -> list[str]:
+        """Database NULL and empty list are both returned as []."""
+        return v if isinstance(v, list) else []

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import FilterBar from '../FilterBar';
 
-const EMPTY = { status: '', dateFrom: '', dateTo: '' };
+const EMPTY = { status: '', dateFrom: '', dateTo: '', tag: '' };
 
 function renderBar(filters = EMPTY, onChange = vi.fn()) {
   return { onChange, ...render(<FilterBar filters={filters} onChange={onChange} />) };
@@ -26,6 +26,11 @@ describe('FilterBar — rendering', () => {
     expect(screen.getByLabelText('מתאריך')).toBeInTheDocument();
     expect(screen.getByLabelText('עד תאריך')).toBeInTheDocument();
   });
+
+  it('renders a tag filter input', () => {
+    renderBar();
+    expect(screen.getByLabelText('סינון לפי תגית')).toBeInTheDocument();
+  });
 });
 
 describe('FilterBar — Clear button', () => {
@@ -44,7 +49,12 @@ describe('FilterBar — Clear button', () => {
     expect(screen.getByTestId('clear-filters')).toBeInTheDocument();
   });
 
-  it('calls onChange with empty filters when Clear is clicked', () => {
+  it('shows Clear when tag is set', () => {
+    renderBar({ ...EMPTY, tag: 'פרשייה א' });
+    expect(screen.getByTestId('clear-filters')).toBeInTheDocument();
+  });
+
+  it('calls onChange with all-empty filters when Clear is clicked', () => {
     const { onChange } = renderBar({ ...EMPTY, status: 'pending' });
     fireEvent.click(screen.getByTestId('clear-filters'));
     expect(onChange).toHaveBeenCalledWith(EMPTY);

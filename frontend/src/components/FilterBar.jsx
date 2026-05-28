@@ -1,4 +1,6 @@
-import { Filter } from 'lucide-react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { Filter, X } from 'lucide-react';
+import { fetchTags } from '../services/reports';
 
 const STATUSES = ['pending', 'confirmed', 'approved', 'rejected', 'deletion_requested'];
 
@@ -11,11 +13,58 @@ const STATUS_LABELS = {
 };
 
 export default function FilterBar({ filters, onChange }) {
+  const [tagInput, setTagInput] = useState(filters.tag || '');
+  const [tagSuggestions, setTagSuggestions] = useState([]);
+  const [showTagSug, setShowTagSug] = useState(false);
+  const tagDebounce = useRef(null);
+
+  // Keep local input in sync if the filter is cleared externally.
+  useEffect(() => {
+    if (!filters.tag) setTagInput('');
+  }, [filters.tag]);
+
   function set(key, value) {
     onChange({ ...filters, [key]: value });
   }
 
-  const hasActive = filters.status || filters.dateFrom || filters.dateTo;
+  const hasActive = filters.status || filters.dateFrom || filters.dateTo || filters.tag;
+
+  function clearAll() {
+    onChange({ status: '', dateFrom: '', dateTo: '', tag: '' });
+    setTagInput('');
+    setTagSuggestions([]);
+  }
+
+  const loadTagSuggestions = useCallback(async (q) => {
+    if (!q.trim()) { setTagSuggestions([]); return; }
+    try {
+      const tags = await fetchTags(q);
+      setTagSuggestions(tags);
+    } catch {
+      setTagSuggestions([]);
+    }
+  }, []);
+
+  function handleTagInput(e) {
+    const q = e.target.value;
+    setTagInput(q);
+    setShowTagSug(true);
+    clearTimeout(tagDebounce.current);
+    tagDebounce.current = setTimeout(() => loadTagSuggestions(q), 250);
+    if (!q) set('tag', '');
+  }
+
+  function applyTag(tag) {
+    setTagInput(tag);
+    set('tag', tag);
+    setShowTagSug(false);
+    setTagSuggestions([]);
+  }
+
+  function handleTagKeyDown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); applyTag(tagInput.trim()); }
+    else if (e.key === 'Escape') setShowTagSug(false);
+  }
 
   return (
     <div className="px-4 py-3 border-b border-regavim-border bg-regavim-bg">
@@ -26,7 +75,7 @@ export default function FilterBar({ filters, onChange }) {
         </div>
         {hasActive && (
           <button
-            onClick={() => onChange({ status: '', dateFrom: '', dateTo: '' })}
+            onClick={clearAll}
             className="text-xs text-regavim-blue hover:underline"
             data-testid="clear-filters"
           >
@@ -49,6 +98,46 @@ export default function FilterBar({ filters, onChange }) {
             </option>
           ))}
         </select>
+
+        {/* Tag filter with autocomplete */}
+        <div className="relative">
+          <div className="relative">
+            <input
+              type="text"
+              aria-label="סינון לפי תגית"
+              placeholder="סינון לפי תגית..."
+              value={tagInput}
+              onChange={handleTagInput}
+              onKeyDown={handleTagKeyDown}
+              onFocus={() => tagInput && setShowTagSug(true)}
+              onBlur={() => setTimeout(() => setShowTagSug(false), 150)}
+              className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-regavim-blue/40 pe-6"
+            />
+            {tagInput && (
+              <button
+                type="button"
+                onClick={() => { setTagInput(''); set('tag', ''); setTagSuggestions([]); }}
+                aria-label="נקה תגית"
+                className="absolute inset-y-0 end-1.5 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+          {showTagSug && tagSuggestions.length > 0 && (
+            <ul className="absolute z-50 mt-0.5 w-full rounded-md border border-gray-200 bg-white shadow-lg overflow-auto max-h-32">
+              {tagSuggestions.map((t) => (
+                <li
+                  key={t}
+                  onMouseDown={() => applyTag(t)}
+                  className="px-2.5 py-1 text-xs cursor-pointer hover:bg-gray-50 text-gray-700"
+                >
+                  {t}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           <div>

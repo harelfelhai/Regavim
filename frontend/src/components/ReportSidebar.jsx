@@ -93,7 +93,7 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
                   {STATUS_LABELS[report.status] ?? report.status}
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-2 mt-1">
+              <div className="flex items-center justify-between gap-2 mt-0.5">
                 {category ? (
                   <span className="text-xs text-regavim-blue/80 font-medium truncate">
                     {category}
@@ -105,6 +105,15 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
                   {formatDate(report.created_at)}
                 </span>
               </div>
+              {report.tags?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {report.tags.map((t) => (
+                    <span key={t} className="rounded-full bg-regavim-blue/10 text-regavim-blue/70 px-1.5 py-px text-[10px] font-medium">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
             </button>
           </li>
         );

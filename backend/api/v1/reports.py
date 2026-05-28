@@ -57,10 +57,38 @@ def create_report(
     return report
 
 
+@router.get("/tags", response_model=List[str])
+def list_tags(
+    q: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return all distinct tags used across non-draft reports, sorted alphabetically.
+    Pass ?q=partial to filter suggestions for autocomplete.
+    """
+    reports = db.query(ReportModel.tags).filter(
+        ReportModel.status != ReportStatus.DRAFT.value,
+        ReportModel.tags.isnot(None),
+    ).all()
+
+    tags: set[str] = set()
+    for (row_tags,) in reports:
+        if isinstance(row_tags, list):
+            tags.update(row_tags)
+
+    if q:
+        q_lower = q.lower()
+        tags = {t for t in tags if q_lower in t.lower()}
+
+    return sorted(tags)
+
+
 @router.get("/", response_model=List[ReportRead])
 def list_reports(
     status: Optional[ReportStatus] = None,
     category: Optional[ViolationCategory] = None,
+    tag: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     reporter_id: Optional[str] = None,
@@ -73,6 +101,7 @@ def list_reports(
     status and category are validated against their enums — invalid values return 422.
     category matches either ai_category or final_category.
     date_from / date_to accept ISO 8601 datetime strings.
+    tag filters to reports that contain the exact tag string.
 
     Drafts (reports still being composed) are hidden unless explicitly requested
     via ?status=draft, so abandoned half-finished reports never reach the map.
@@ -88,7 +117,10 @@ def list_reports(
         date_to=date_to,
         reporter_id=reporter_id,
     )
-    return query.all()
+    rows = query.all()
+    if tag:
+        rows = [r for r in rows if isinstance(r.tags, list) and tag in r.tags]
+    return rows
 
 
 @router.get("/{report_id}", response_model=ReportRead)

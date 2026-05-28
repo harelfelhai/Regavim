@@ -10,7 +10,7 @@ import ReportForm from './ReportForm';
 import FilterBar from './FilterBar';
 import ReportDetailPanel from './ReportDetailPanel';
 
-const EMPTY_FILTERS = { status: '', dateFrom: '', dateTo: '' };
+const EMPTY_FILTERS = { status: '', dateFrom: '', dateTo: '', tag: '' };
 
 export default function MapDashboard() {
   const navigate = useNavigate();
@@ -30,6 +30,7 @@ export default function MapDashboard() {
     if (filters.status) f.status = filters.status;
     if (filters.dateFrom) f.date_from = `${filters.dateFrom}T00:00:00`;
     if (filters.dateTo) f.date_to = `${filters.dateTo}T23:59:59`;
+    if (filters.tag) f.tag = filters.tag;
     return f;
   }, [filters]);
 

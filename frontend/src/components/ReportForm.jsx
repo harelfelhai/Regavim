@@ -12,6 +12,7 @@ import {
 import { useReportForm, STEP } from '../hooks/useReportForm';
 import LocationPicker from './LocationPicker';
 import CameraCapture, { isMobileDevice } from './CameraCapture';
+import TagInput from './TagInput';
 
 // Must match MAX_IMAGE_BYTES in backend/services/image_service.py
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -99,6 +100,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
 
   const [description, setDescription] = useState('');
   const [finalCategory, setFinalCategory] = useState('');
+  const [tags, setTags] = useState([]);
   const [fileError, setFileError] = useState(null);
   const [isCompressing, setIsCompressing] = useState(false);
 
@@ -178,6 +180,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
     cancelAndCleanup();
     setDescription('');
     setFinalCategory('');
+    setTags([]);
     setFileError(null);
     setIsCompressing(false);
     setCaptureMode(null);
@@ -304,7 +307,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
   // ── Submit pipeline result ───────────────────────────────────────────────────
   async function onSubmit(e) {
     e.preventDefault();
-    await handleSubmit({ description, finalCategory: displayedCategory || null });
+    await handleSubmit({ description, finalCategory: displayedCategory || null, tags });
     if (step !== STEP.ERROR) onSubmitted?.();
   }
 
@@ -594,6 +597,13 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-regavim-blue/40"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  תגיות <span className="font-normal text-gray-400">(לקיבוץ פרשיות)</span>
+                </label>
+                <TagInput value={tags} onChange={setTags} />
               </div>
 
               <button

@@ -2,10 +2,21 @@ import api from './api';
 
 /**
  * Fetch all reports, optionally filtered.
- * @param {Object} filters - status, category, date_from, date_to, reporter_id
+ * @param {Object} filters - status, category, tag, date_from, date_to, reporter_id
  */
 export async function fetchReports(filters = {}) {
   const { data } = await api.get('/api/v1/reports/', { params: filters });
+  return data;
+}
+
+/**
+ * Fetch distinct tags used across all reports, optionally filtered by a partial string.
+ * Used for TagInput autocomplete.
+ * @param {string} [q] - Partial tag string to search
+ * @returns {Promise<string[]>}
+ */
+export async function fetchTags(q = '') {
+  const { data } = await api.get('/api/v1/reports/tags', { params: q ? { q } : {} });
   return data;
 }
 

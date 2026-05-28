@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.constants import ReportStatus
@@ -68,6 +68,10 @@ class Report(Base):
     user_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Free-text tags for grouping related reports (e.g. same incident / "פרשייה").
+    # Stored as a JSON array. None and [] are both treated as "no tags".
+    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="reports")
     images: Mapped[list["Image"]] = relationship(

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useReportDetail } from '../hooks/useReportDetail';
 import { getImageFileUrl } from '../services/images';
+import TagInput from './TagInput';
 
 const CATEGORIES = [
   'ILLEGAL_CONSTRUCTION',
@@ -80,16 +81,20 @@ function formatStatus(s) {
 export default function ReportDetailPanel({ reportId, onBack, onPatched, currentUser }) {
   const [confirmValue, setConfirmValue] = useState('');
   const [deletionConfirmed, setDeletionConfirmed] = useState(false);
+  const [localTags, setLocalTags] = useState(null); // null = follow report.tags
+  const [tagsDirty, setTagsDirty] = useState(false);
 
   useEffect(() => {
     setConfirmValue('');
     setDeletionConfirmed(false);
+    setLocalTags(null);
+    setTagsDirty(false);
   }, [reportId]);
 
   const {
     report, loading, error,
     patching, patchError,
-    confirmCategory, requestDeletion,
+    confirmCategory, requestDeletion, saveTags,
   } = useReportDetail(reportId, { onPatched });
 
   if (loading) {
@@ -116,6 +121,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const canConfirm = EDITABLE_STATUSES.has(report.status);
   const firstImageId = report.image_ids?.[0];
   const displayCategory = confirmValue || report.final_category || report.ai_category || '';
+  const displayTags = localTags ?? (report.tags || []);
 
   const canRequestDeletion =
     currentUser &&
@@ -218,6 +224,43 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             </span>
           </div>
         )}
+
+        {/* Tags — editable on pending/confirmed reports */}
+        <div>
+          <p className="text-xs text-gray-400 mb-1">תגיות</p>
+          {canConfirm ? (
+            <div className="space-y-1.5">
+              <TagInput
+                value={displayTags}
+                onChange={(t) => { setLocalTags(t); setTagsDirty(true); }}
+                placeholder="הוסף תגית לפרשייה..."
+              />
+              {tagsDirty && (
+                <button
+                  type="button"
+                  disabled={patching}
+                  onClick={async () => {
+                    const ok = await saveTags(displayTags);
+                    if (ok) setTagsDirty(false);
+                  }}
+                  className="text-xs text-regavim-blue hover:underline disabled:opacity-50"
+                >
+                  {patching ? 'שומר...' : 'שמור תגיות'}
+                </button>
+              )}
+            </div>
+          ) : displayTags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {displayTags.map((t) => (
+                <span key={t} className="rounded-full bg-regavim-blue/10 text-regavim-blue px-2 py-0.5 text-xs font-medium">
+                  {t}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-300">ללא תגיות</span>
+          )}
+        </div>
       </div>
 
       {/* Confirmation section — only for actionable statuses */}

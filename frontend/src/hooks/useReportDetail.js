@@ -72,5 +72,23 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
-  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion };
+  async function saveTags(tags) {
+    if (!reportId) return false;
+    setPatching(true);
+    setPatchError(null);
+
+    try {
+      const updated = await patchReport(reportId, { tags });
+      setReport(updated);
+      onPatched?.();
+      return true;
+    } catch (err) {
+      setPatchError(err?.message ?? 'שמירת התגיות נכשלה. נסה/י שנית.');
+      return false;
+    } finally {
+      setPatching(false);
+    }
+  }
+
+  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion, saveTags };
 }

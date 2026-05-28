@@ -101,9 +101,9 @@ export function useReportForm() {
   }
 
   /**
-   * Finalises the report with the coordinator's description and chosen category.
+   * Finalises the report with the coordinator's description, chosen category, and tags.
    */
-  async function handleSubmit({ description, finalCategory }) {
+  async function handleSubmit({ description, finalCategory, tags }) {
     if (!reportId) return;
     setStep(STEP.SUBMITTING);
     setError(null);
@@ -111,6 +111,7 @@ export function useReportForm() {
     try {
       const payload = { description, status: 'confirmed' };
       if (finalCategory) payload.final_category = finalCategory;
+      if (Array.isArray(tags)) payload.tags = tags;
       await patchReport(reportId, payload);
       setStep(STEP.DONE);
     } catch (err) {
