@@ -231,18 +231,13 @@ describe('ReportForm — initialTarget pre-fill (map-click flow)', () => {
 // ── Busy overlay ──────────────────────────────────────────────────────────────
 
 describe('ReportForm — busy overlay', () => {
-  it('shows uploading label during UPLOADING step', () => {
-    renderForm({ step: STEP.UPLOADING, imagePreview: 'blob:x' });
-    expect(screen.getByText('מעלה תמונה...')).toBeInTheDocument();
-  });
-
-  it('shows submitting label during SUBMITTING step', () => {
+  it('shows sending label during SUBMITTING step', () => {
     renderForm({ step: STEP.SUBMITTING, imagePreview: 'blob:x' });
-    expect(screen.getByText('שולח דיווח...')).toBeInTheDocument();
+    expect(screen.getByText('מעלה ושולח...')).toBeInTheDocument();
   });
 
-  it('renders the image preview element', () => {
-    renderForm({ step: STEP.UPLOADING, imagePreview: 'blob:x' });
+  it('renders the image preview element during SUBMITTING', () => {
+    renderForm({ step: STEP.SUBMITTING, imagePreview: 'blob:x' });
     expect(screen.getByAltText('תצוגה מקדימה של התמונה הנבחרת')).toBeInTheDocument();
   });
 });

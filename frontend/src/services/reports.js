@@ -41,6 +41,33 @@ export async function createReport(payload = {}) {
 }
 
 /**
+ * Atomic submit: upload image and create report in one multipart request.
+ * Used by the offline-capable create flow — the file and all metadata travel
+ * together so the client can buffer the full payload locally while offline
+ * and replay it in a single call on reconnect.
+ *
+ * @param {File}   file
+ * @param {Object} fields - { description, finalCategory, tags, userLat,
+ *   userLng, targetLat, targetLng, observedAt }
+ * @returns {Promise<Object>} ReportRead
+ */
+export async function submitReport(file, fields = {}) {
+  const fd = new FormData();
+  fd.append('file', file);
+  if (fields.description)              fd.append('description',    fields.description);
+  if (fields.finalCategory)            fd.append('final_category', fields.finalCategory);
+  if (fields.userLat    != null)       fd.append('user_lat',       String(fields.userLat));
+  if (fields.userLng    != null)       fd.append('user_lng',       String(fields.userLng));
+  if (fields.targetLat  != null)       fd.append('target_lat',     String(fields.targetLat));
+  if (fields.targetLng  != null)       fd.append('target_lng',     String(fields.targetLng));
+  if (fields.observedAt)               fd.append('observed_at',    fields.observedAt);
+  if (fields.tags?.length)             fd.append('tags',           JSON.stringify(fields.tags));
+
+  const { data } = await api.post('/api/v1/reports/submit', fd, { timeout: 120_000 });
+  return data;
+}
+
+/**
  * Update mutable fields on an existing report (description, status, final_category, land_context).
  * Sending read-only fields (ai_category, user_id, coordinates) returns 422.
  * @param {string} id      - Report UUID

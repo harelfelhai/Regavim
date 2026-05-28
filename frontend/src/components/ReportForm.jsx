@@ -80,8 +80,7 @@ function formatCategory(cat) {
 }
 
 const STEP_LABEL = {
-  [STEP.UPLOADING]:  'מעלה תמונה...',
-  [STEP.SUBMITTING]: 'שולח דיווח...',
+  [STEP.SUBMITTING]: 'מעלה ושולח...',
 };
 
 /**
@@ -138,9 +137,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
 
   const displayedCategory = finalCategory || '';
 
-  const isBusy =
-    step === STEP.UPLOADING ||
-    step === STEP.SUBMITTING;
+  const isBusy = step === STEP.SUBMITTING;
 
   // ── GPS ─────────────────────────────────────────────────────────────────────
   // Two-tier strategy: try high-accuracy first (real GPS, 20 s for a cold
@@ -527,7 +524,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
         </form>
       )}
 
-      {/* ── Phase 3+: Upload / analyse / ready pipeline ───────────────────────── */}
+      {/* ── Phase 3: Category / description form + atomic submit ────────────── */}
       {step !== STEP.IDLE && (
         <form onSubmit={onSubmit} className="flex flex-col gap-5 px-6 py-5">
           {imagePreview && (
