@@ -14,6 +14,14 @@ vi.mock('../../hooks/useReports', () => ({
   useReports: () => ({ reports: [], loading: false, error: null, refresh: vi.fn() }),
 }));
 
+vi.mock('../../hooks/useOfflineSync', () => ({
+  useOfflineSync: () => ({
+    queue: [], syncing: false, isOnline: true,
+    pendingCount: 0, failedItems: [], syncNow: vi.fn(),
+    discard: vi.fn(), retry: vi.fn(), refresh: vi.fn(),
+  }),
+}));
+
 vi.mock('../../store/mapStore', () => ({
   default: () => ({
     panTarget: null,

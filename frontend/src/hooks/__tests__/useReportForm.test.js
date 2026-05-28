@@ -2,10 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useReportForm, STEP } from '../useReportForm';
 import { submitReport } from '../../services/reports';
+import { enqueueReport } from '../../services/offlineQueue';
 
 vi.mock('../../services/reports', () => ({
   submitReport: vi.fn(),
   createReport: vi.fn(),
+}));
+
+vi.mock('../../services/offlineQueue', () => ({
+  enqueueReport: vi.fn(),
 }));
 
 global.URL.createObjectURL = vi.fn(() => 'blob:mock-preview');
@@ -120,6 +125,79 @@ describe('useReportForm — submit flow', () => {
     act(() => { result.current.handleFileChange(mockFile); });
     await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
     expect(result.current.error).toBe('השליחה נכשלה. נסה/י שנית.');
+  });
+});
+
+describe('useReportForm — offline queuing (QUEUED step)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    enqueueReport.mockResolvedValue('queued-id-123');
+  });
+
+  it('transitions to QUEUED when submit fails with a network error', async () => {
+    const err = new Error('Network');
+    err.isNetworkError = true;
+    submitReport.mockRejectedValue(err);
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    await act(() => result.current.handleSubmit({ description: 'test', finalCategory: 'OTHER' }));
+    expect(result.current.step).toBe(STEP.QUEUED);
+  });
+
+  it('transitions to QUEUED when submit times out', async () => {
+    const err = new Error('Timeout');
+    err.isTimeout = true;
+    submitReport.mockRejectedValue(err);
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
+    expect(result.current.step).toBe(STEP.QUEUED);
+  });
+
+  it('returns "queued" string on network error', async () => {
+    const err = new Error('Network');
+    err.isNetworkError = true;
+    submitReport.mockRejectedValue(err);
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    let res;
+    await act(async () => { res = await result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }); });
+    expect(res).toBe('queued');
+  });
+
+  it('calls enqueueReport with the file and collected fields', async () => {
+    const err = new Error('Network');
+    err.isNetworkError = true;
+    submitReport.mockRejectedValue(err);
+    const { result } = renderHook(() => useReportForm());
+    act(() => {
+      result.current.handleFileChange(mockFile, {
+        targetLat: 31.5, targetLng: 35.0, userLat: 31.4, userLng: 34.9,
+        observedAt: '2024-01-01T10:00:00.000Z',
+      });
+    });
+    await act(() => result.current.handleSubmit({ description: 'observed', finalCategory: 'ROAD_PAVING' }));
+    expect(enqueueReport).toHaveBeenCalledWith(
+      mockFile,
+      expect.objectContaining({
+        description:   'observed',
+        finalCategory: 'ROAD_PAVING',
+        targetLat:     31.5,
+        targetLng:     35.0,
+      }),
+    );
+  });
+
+  it('falls back to ERROR state if enqueueReport throws', async () => {
+    const netErr = new Error('Network');
+    netErr.isNetworkError = true;
+    submitReport.mockRejectedValue(netErr);
+    enqueueReport.mockRejectedValue(new Error('IDB quota exceeded'));
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
+    expect(result.current.step).toBe(STEP.ERROR);
+    expect(result.current.error).toBe('לא ניתן לשמור. בדוק/י שיש מספיק מקום פנוי.');
   });
 });
 

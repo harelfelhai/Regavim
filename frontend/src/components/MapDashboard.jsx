@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layers, LogOut, Plus, List, X } from 'lucide-react';
 import { useReports } from '../hooks/useReports';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 import useAuthStore from '../store/authStore';
 import useMapStore from '../store/mapStore';
 import Map from './Map';
+import OfflineQueue from './OfflineQueue';
 import ReportSidebar from './ReportSidebar';
 import ReportForm from './ReportForm';
 import FilterBar from './FilterBar';
@@ -19,6 +21,7 @@ export default function MapDashboard() {
 
   const [showForm,      setShowForm]      = useState(false);
   const [initialTarget, setInitialTarget] = useState(null);
+  const [draftToEdit,   setDraftToEdit]   = useState(null);
   const [filters,       setFilters]       = useState(EMPTY_FILTERS);
   // Mobile: sidebar is hidden by default; visible on toggle.
   const [showSidebar,   setShowSidebar]   = useState(false);
@@ -35,6 +38,7 @@ export default function MapDashboard() {
   }, [filters]);
 
   const { reports, loading, error, refresh } = useReports(activeFilters);
+  const { queue, syncing, isOnline, discard, retry, refresh: refreshQueue } = useOfflineSync();
 
   function handleSelectReport(report) {
     selectReport(report.id);
@@ -44,14 +48,24 @@ export default function MapDashboard() {
   }
 
   function handleSubmitted() {
+    if (draftToEdit) discard(draftToEdit.id);
     setShowForm(false);
     setInitialTarget(null);
+    setDraftToEdit(null);
     refresh();
   }
 
   function handleCloseForm() {
     setShowForm(false);
     setInitialTarget(null);
+    setDraftToEdit(null);
+  }
+
+  function handleEditDraft(item) {
+    setDraftToEdit(item);
+    setInitialTarget(null);
+    setShowForm(true);
+    setShowSidebar(false);
   }
 
   function handleCreateAtMap(coords) {
@@ -157,6 +171,15 @@ export default function MapDashboard() {
           )}
         </div>
 
+        <OfflineQueue
+          queue={queue}
+          syncing={syncing}
+          isOnline={isOnline}
+          onRetry={retry}
+          onDiscard={discard}
+          onEdit={handleEditDraft}
+        />
+
         <footer className="px-4 py-3 border-t border-regavim-border flex-shrink-0 flex items-center justify-between gap-2">
           <span className="text-xs text-gray-400 truncate" title={user?.email}>
             {user?.email ?? ''}
@@ -225,6 +248,7 @@ export default function MapDashboard() {
                 onClose={handleCloseForm}
                 onSubmitted={handleSubmitted}
                 initialTarget={initialTarget}
+                initialDraft={draftToEdit}
               />
             </div>
           </div>

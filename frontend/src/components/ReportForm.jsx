@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import {
   Camera,
+  CloudOff,
   Images,
   Loader2,
   AlertCircle,
@@ -88,17 +89,21 @@ const STEP_LABEL = {
  * @param {Function} props.onClose
  * @param {Function} props.onSubmitted
  * @param {{ lat: number, lng: number } | null} [props.initialTarget]
- *   Pre-fill the location picker — e.g. set when the user starts a report
- *   by clicking on the main map.
+ *   Pre-fill the location picker when the user starts a report by clicking
+ *   on the main map.
+ * @param {Object | null} [props.initialDraft]
+ *   Re-open a queued (offline) draft for editing. When provided the form
+ *   skips the camera/gallery/metadata phase and goes straight to READY.
  */
-export default function ReportForm({ onClose, onSubmitted, initialTarget = null }) {
+export default function ReportForm({ onClose, onSubmitted, initialTarget = null, initialDraft = null }) {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const tagInputRef = useRef(null);
+  const draftApplied = useRef(false);
 
-  const [description, setDescription] = useState('');
-  const [finalCategory, setFinalCategory] = useState('');
-  const [tags, setTags] = useState([]);
+  const [description, setDescription] = useState(initialDraft?.fields?.description ?? '');
+  const [finalCategory, setFinalCategory] = useState(initialDraft?.fields?.finalCategory ?? '');
+  const [tags, setTags] = useState(initialDraft?.fields?.tags ?? []);
   const [fileError, setFileError] = useState(null);
   const [descriptionError, setDescriptionError] = useState(null);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -134,6 +139,16 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
     handleSubmit,
     cancelAndCleanup,
   } = useReportForm();
+
+  // Pre-populate from an offline draft on first mount.
+  useEffect(() => {
+    if (initialDraft && !draftApplied.current) {
+      draftApplied.current = true;
+      const { userLat, userLng, targetLat, targetLng, observedAt } = initialDraft.fields;
+      handleFileChange(initialDraft.file, { userLat, userLng, targetLat, targetLng, observedAt });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const displayedCategory = finalCategory || '';
 
@@ -321,8 +336,28 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
       <div className="flex flex-col items-center justify-center gap-4 py-12 px-6 text-center">
         <CheckCircle2 size={48} className="text-green-500" />
         <h2 className="text-lg font-semibold text-gray-900">הדיווח נשלח!</h2>
+        <p className="text-sm text-gray-500">הדיווח אושר ומוצג במפה.</p>
+        <button
+          onClick={onClose}
+          className="mt-2 px-5 py-2 rounded-lg bg-regavim-blue text-white text-sm font-medium hover:bg-regavim-blue/90 transition-colors"
+        >
+          סגור
+        </button>
+      </div>
+    );
+  }
+
+  // ── Queued (offline) ─────────────────────────────────────────────────────────
+  if (step === STEP.QUEUED) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-4 py-12 px-6 text-center"
+        data-testid="queued-screen"
+      >
+        <CloudOff size={48} className="text-amber-500" />
+        <h2 className="text-lg font-semibold text-gray-900">הדיווח נשמר</h2>
         <p className="text-sm text-gray-500">
-          הדיווח אושר ומוצג במפה.
+          אין חיבור לרשת. הדיווח יישלח אוטומטית כשהמכשיר יחזור למצב מקוון.
         </p>
         <button
           onClick={onClose}

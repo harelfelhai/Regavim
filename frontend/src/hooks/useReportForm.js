@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { submitReport } from '../services/reports';
+import { enqueueReport } from '../services/offlineQueue';
 
 export const STEP = {
   IDLE:       'idle',
@@ -7,17 +8,21 @@ export const STEP = {
   ERROR:      'error',
   SUBMITTING: 'submitting',
   DONE:       'done',
+  QUEUED:     'queued', // saved locally; will upload when back online
 };
 
 /**
  * Manages the full create-report flow:
  *   idle → ready (file stored locally, metadata captured)
  *        → submitting (atomic upload+create in one request)
- *        → done
+ *        → done   — server accepted the report
+ *        → queued — network was unavailable; payload saved to IndexedDB
+ *                   and will be retried automatically on reconnect
  *
- * The file is never uploaded until the user explicitly submits. This makes
- * offline buffering straightforward: the outbox layer (PR2) can store
- * { file, fields } in IndexedDB and replay submitReport() on reconnect.
+ * No network call is made until the user explicitly submits. This makes
+ * offline buffering straightforward: handleSubmit enqueues the payload
+ * locally on any network failure and transitions to QUEUED so the caller
+ * can show the appropriate success message.
  */
 export function useReportForm() {
   const [step, setStep]               = useState(STEP.IDLE);
@@ -51,7 +56,10 @@ export function useReportForm() {
 
   /**
    * Upload image and create report atomically.
-   * Transitions: READY → SUBMITTING → DONE (or ERROR).
+   *
+   * On success → DONE.
+   * On network failure → payload is queued in IndexedDB → QUEUED.
+   * On server error (4xx/5xx) → ERROR with message.
    */
   async function handleSubmit({ description, finalCategory, tags }) {
     if (!fileRef.current) return false;
@@ -59,22 +67,34 @@ export function useReportForm() {
     setError(null);
 
     const { userLat, userLng, targetLat, targetLng, observedAt } = metaRef.current;
+    const fields = {
+      description,
+      finalCategory,
+      tags,
+      userLat,
+      userLng,
+      targetLat,
+      targetLng,
+      observedAt,
+    };
 
     try {
-      const report = await submitReport(fileRef.current, {
-        description,
-        finalCategory,
-        tags,
-        userLat,
-        userLng,
-        targetLat,
-        targetLng,
-        observedAt,
-      });
+      const report = await submitReport(fileRef.current, fields);
       setReportId(report.id);
       setStep(STEP.DONE);
       return true;
     } catch (err) {
+      if (!navigator.onLine || err.isNetworkError || err.isTimeout) {
+        try {
+          await enqueueReport(fileRef.current, fields);
+          setStep(STEP.QUEUED);
+          return 'queued';
+        } catch {
+          setError('לא ניתן לשמור. בדוק/י שיש מספיק מקום פנוי.');
+          setStep(STEP.ERROR);
+          return false;
+        }
+      }
       setError(err?.message ?? 'השליחה נכשלה. נסה/י שנית.');
       setStep(STEP.ERROR);
       return false;

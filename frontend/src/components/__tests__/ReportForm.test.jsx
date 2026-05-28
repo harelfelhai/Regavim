@@ -373,3 +373,29 @@ describe('ReportForm — done state', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+// ── Queued (offline) state ────────────────────────────────────────────────────
+
+describe('ReportForm — queued state (offline save)', () => {
+  it('shows the offline-saved heading', () => {
+    renderForm({ step: STEP.QUEUED });
+    expect(screen.getByText('הדיווח נשמר')).toBeInTheDocument();
+  });
+
+  it('shows the offline explanation text', () => {
+    renderForm({ step: STEP.QUEUED });
+    expect(screen.getByText(/הדיווח יישלח אוטומטית/)).toBeInTheDocument();
+  });
+
+  it('renders the queued-screen test ID', () => {
+    renderForm({ step: STEP.QUEUED });
+    expect(screen.getByTestId('queued-screen')).toBeInTheDocument();
+  });
+
+  it('calls onClose when the Close button is clicked', () => {
+    const onClose = vi.fn();
+    renderForm({ step: STEP.QUEUED }, { onClose });
+    fireEvent.click(screen.getByRole('button', { name: 'סגור' }));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
