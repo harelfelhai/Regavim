@@ -97,6 +97,23 @@ describe('ReportSidebar — status badge colors', () => {
   });
 });
 
+describe('ReportSidebar — category reflection', () => {
+  it('shows the confirmed category label in the list row', () => {
+    render(<ReportSidebar reports={[{ ...CONFIRMED, final_category: 'DEMOLITION' }]} />);
+    expect(screen.getByText('הריסה')).toBeInTheDocument();
+  });
+
+  it('falls back to the AI category when no final category is set', () => {
+    render(<ReportSidebar reports={[{ ...PENDING, ai_category: 'LAND_GRADING' }]} />);
+    expect(screen.getByText('עבודות עפר')).toBeInTheDocument();
+  });
+
+  it('shows "ללא קטגוריה" when neither category is present', () => {
+    render(<ReportSidebar reports={[PENDING]} />);
+    expect(screen.getByText(/ללא קטגוריה/)).toBeInTheDocument();
+  });
+});
+
 describe('ReportSidebar — interaction', () => {
   it('calls onSelectReport when any item is clicked', () => {
     const onSelect = vi.fn();

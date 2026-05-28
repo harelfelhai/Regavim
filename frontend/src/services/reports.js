@@ -20,10 +20,16 @@ export async function fetchReport(id) {
 
 /**
  * Open a new report. All fields optional — an empty report is valid.
- * @param {Object} payload - ReportCreate fields (description, coordinates, land_context)
+ * @param {Object}  payload        - ReportCreate fields (description, coordinates, land_context)
+ * @param {Object}  options
+ * @param {boolean} options.draft  - Create as a hidden draft (default false). The
+ *   multi-step create flow uses this so the report stays invisible until the
+ *   reporter submits, and an abandoned flow can be hard-deleted.
  */
-export async function createReport(payload = {}) {
-  const { data } = await api.post('/api/v1/reports/', payload);
+export async function createReport(payload = {}, { draft = false } = {}) {
+  const { data } = await api.post('/api/v1/reports/', payload, {
+    params: draft ? { draft: 'true' } : undefined,
+  });
   return data;
 }
 

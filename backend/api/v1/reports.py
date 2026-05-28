@@ -19,12 +19,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user
+from backend.api.v1.images import get_storage
 from backend.core.constants import ReportStatus, ViolationCategory
 from backend.db.session import get_db
 from backend.models.report import Report as ReportModel
 from backend.models.user import User
 from backend.schemas.report import ReportCreate, ReportRead, ReportUpdate
 from backend.services.report_service import apply_report_filters
+from backend.services.storage import StorageProvider
 
 router = APIRouter()
 
@@ -32,13 +34,21 @@ router = APIRouter()
 @router.post("/", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
 def create_report(
     payload: ReportCreate,
+    draft: bool = Query(
+        default=False,
+        description=(
+            "Open the report as a hidden draft. The interactive multi-step "
+            "create flow uses this so a report only becomes visible once the "
+            "reporter submits — and abandoned drafts can be hard-deleted."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Open a new report owned by the authenticated user."""
     report = ReportModel(
         user_id=current_user.id,
-        status=ReportStatus.PENDING.value,
+        status=ReportStatus.DRAFT.value if draft else ReportStatus.PENDING.value,
         **payload.model_dump(),
     )
     db.add(report)
@@ -63,8 +73,13 @@ def list_reports(
     status and category are validated against their enums — invalid values return 422.
     category matches either ai_category or final_category.
     date_from / date_to accept ISO 8601 datetime strings.
+
+    Drafts (reports still being composed) are hidden unless explicitly requested
+    via ?status=draft, so abandoned half-finished reports never reach the map.
     """
     query = db.query(ReportModel)
+    if status is None:
+        query = query.filter(ReportModel.status != ReportStatus.DRAFT.value)
     query = apply_report_filters(
         query,
         status=status.value if status else None,
@@ -159,29 +174,30 @@ def delete_report(
     report_id: str,
     force: bool = Query(default=False),
     db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage),
     current_user: User = Depends(get_current_user),
 ):
     """
     Delete a report.
 
     Without ?force=true: soft-delete (status → rejected). Row retained for audit.
-    With ?force=true: hard-delete. Only allowed for pending reports with no images attached.
+    With ?force=true: hard-delete a draft. Only allowed while the report is still
+    a draft (never submitted). Any attached evidence files are removed from
+    storage too, so abandoning the create flow leaves nothing behind.
     """
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
     if force:
-        if report.status != ReportStatus.PENDING.value:
+        if report.status != ReportStatus.DRAFT.value:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="מחיקה מאולצת מותרת רק לדיווחים ממתינים (טיוטה).",
+                detail="מחיקה מאולצת מותרת רק לטיוטות שטרם נשלחו.",
             )
-        if report.images:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="מחיקה מאולצת אינה מותרת כאשר מצורפות תמונות.",
-            )
+        # Remove evidence files before the cascade drops the Image rows.
+        for image in report.images:
+            storage.delete(image.file_path)
         db.delete(report)
     else:
         report.status = ReportStatus.REJECTED.value

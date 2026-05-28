@@ -15,6 +15,21 @@ const STATUS_LABELS = {
   deletion_requested: 'ממתין למחיקה',
 };
 
+const CATEGORY_LABELS = {
+  ILLEGAL_CONSTRUCTION:      'בנייה לא חוקית',
+  LAND_GRADING:              'עבודות עפר',
+  AGRICULTURAL_ENCROACHMENT: 'השתלטות על קרקע חקלאית',
+  ROAD_PAVING:               'סלילת דרך',
+  DEMOLITION:                'הריסה',
+  ILLEGAL_DUMPING:           'השלכת פסולת',
+  OTHER:                     'אחר',
+};
+
+function formatCategory(cat) {
+  if (!cat) return null;
+  return CATEGORY_LABELS[cat] ?? cat.replace(/_/g, ' ');
+}
+
 function formatDate(iso) {
   if (!iso) return '—';
   try {
@@ -60,6 +75,7 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
     <ul className="divide-y divide-gray-100" role="list" aria-label="דיווחים">
       {reports.map((report) => {
         const badgeClass = STATUS_BADGE[report.status] ?? 'bg-gray-100 text-gray-500';
+        const category = formatCategory(report.final_category || report.ai_category);
 
         return (
           <li key={report.id}>
@@ -77,9 +93,18 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
                   {STATUS_LABELS[report.status] ?? report.status}
                 </span>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {formatDate(report.created_at)}
-              </p>
+              <div className="flex items-center justify-between gap-2 mt-1">
+                {category ? (
+                  <span className="text-xs text-regavim-blue/80 font-medium truncate">
+                    {category}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-300">ללא קטגוריה</span>
+                )}
+                <span className="shrink-0 text-xs text-gray-400">
+                  {formatDate(report.created_at)}
+                </span>
+              </div>
             </button>
           </li>
         );

@@ -102,6 +102,42 @@ class TestGetReport:
         assert response.status_code == 404
 
 
+class TestDraftReports:
+    def test_create_with_draft_flag_sets_draft_status(self, client):
+        data = client.post("/api/v1/reports/?draft=true", json=_VALID_PAYLOAD).json()
+        assert data["status"] == "draft"
+
+    def test_create_without_draft_flag_stays_pending(self, client):
+        data = client.post("/api/v1/reports/", json=_VALID_PAYLOAD).json()
+        assert data["status"] == "pending"
+
+    def test_drafts_excluded_from_default_list(self, client):
+        client.post("/api/v1/reports/?draft=true", json=_VALID_PAYLOAD)
+        client.post("/api/v1/reports/", json=_VALID_PAYLOAD)  # visible
+        data = client.get("/api/v1/reports/").json()
+        assert len(data) == 1
+        assert data[0]["status"] == "pending"
+
+    def test_drafts_visible_with_explicit_status_filter(self, client):
+        client.post("/api/v1/reports/?draft=true", json=_VALID_PAYLOAD)
+        data = client.get("/api/v1/reports/?status=draft").json()
+        assert len(data) == 1
+        assert data[0]["status"] == "draft"
+
+    def test_force_delete_draft_hard_deletes(self, client):
+        created = client.post("/api/v1/reports/?draft=true", json=_VALID_PAYLOAD).json()
+        response = client.delete(f"/api/v1/reports/{created['id']}?force=true")
+        assert response.status_code == 204
+        assert client.get(f"/api/v1/reports/{created['id']}").status_code == 404
+
+    def test_force_delete_non_draft_rejected(self, client):
+        created = client.post("/api/v1/reports/", json=_VALID_PAYLOAD).json()
+        response = client.delete(f"/api/v1/reports/{created['id']}?force=true")
+        assert response.status_code == 409
+        # Row is untouched — still retrievable and still pending.
+        assert client.get(f"/api/v1/reports/{created['id']}").json()["status"] == "pending"
+
+
 class TestReportImageIds:
     def test_new_report_has_empty_image_ids(self, client):
         data = client.post("/api/v1/reports/", json={}).json()

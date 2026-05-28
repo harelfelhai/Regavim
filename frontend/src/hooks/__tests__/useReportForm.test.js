@@ -65,7 +65,7 @@ describe('useReportForm — successful file upload flow', () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
-    expect(createReport).toHaveBeenCalledWith({});
+    expect(createReport).toHaveBeenCalledWith({}, { draft: true });
     expect(uploadImage).toHaveBeenCalledWith('report-1', mockFile);
     expect(analyzeImage).toHaveBeenCalledWith('img-1');
   });

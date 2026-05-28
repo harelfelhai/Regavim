@@ -70,13 +70,27 @@ describe('createReport', () => {
   it('POSTs to /api/v1/reports/ with empty payload by default', async () => {
     api.post.mockResolvedValue({ data: { id: 'r-1' } });
     await createReport();
-    expect(api.post).toHaveBeenCalledWith('/api/v1/reports/', {});
+    expect(api.post).toHaveBeenCalledWith('/api/v1/reports/', {}, { params: undefined });
   });
 
   it('forwards payload fields to the POST body', async () => {
     api.post.mockResolvedValue({ data: { id: 'r-1' } });
     await createReport({ description: 'test' });
-    expect(api.post).toHaveBeenCalledWith('/api/v1/reports/', { description: 'test' });
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/v1/reports/',
+      { description: 'test' },
+      { params: undefined },
+    );
+  });
+
+  it('sends ?draft=true when creating a draft', async () => {
+    api.post.mockResolvedValue({ data: { id: 'r-1' } });
+    await createReport({ description: 'test' }, { draft: true });
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/v1/reports/',
+      { description: 'test' },
+      { params: { draft: 'true' } },
+    );
   });
 
   it('returns the created report data', async () => {

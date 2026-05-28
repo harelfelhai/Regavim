@@ -73,7 +73,10 @@ export function useReportForm() {
       if (targetLng  !== null) createPayload.target_lng  = targetLng;
       if (observedAt !== null) createPayload.observed_at = observedAt;
 
-      const report = await createReport(createPayload);
+      // Create as a draft: the report stays hidden from the map/list until the
+      // reporter submits, and a hard-refresh mid-flow leaves a removable draft
+      // rather than a half-finished visible report.
+      const report = await createReport(createPayload, { draft: true });
       createdReportId = report.id;
       setReportId(report.id);
 
