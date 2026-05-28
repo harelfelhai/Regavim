@@ -18,9 +18,6 @@ class ViolationCategory(str, Enum):
 
 
 class ReportStatus(str, Enum):
-    # In-progress report still being composed in the multi-step create flow.
-    # Hidden from the default list/map and hard-deletable until the reporter submits.
-    DRAFT = "draft"
     PENDING = "pending"
     CONFIRMED = "confirmed"
     APPROVED = "approved"

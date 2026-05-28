@@ -30,17 +30,13 @@ export async function fetchReport(id) {
 }
 
 /**
- * Open a new report. All fields optional — an empty report is valid.
- * @param {Object}  payload        - ReportCreate fields (description, coordinates, land_context)
- * @param {Object}  options
- * @param {boolean} options.draft  - Create as a hidden draft (default false). The
- *   multi-step create flow uses this so the report stays invisible until the
- *   reporter submits, and an abandoned flow can be hard-deleted.
+ * Create a report. Nothing is persisted before this call — the multi-step flow
+ * uploads and analyses the image first, then submits everything here at once.
+ * @param {Object} payload - ReportCreate fields (description, coordinates,
+ *   land_context, tags, final_category, image_id)
  */
-export async function createReport(payload = {}, { draft = false } = {}) {
-  const { data } = await api.post('/api/v1/reports/', payload, {
-    params: draft ? { draft: 'true' } : undefined,
-  });
+export async function createReport(payload = {}) {
+  const { data } = await api.post('/api/v1/reports/', payload);
   return data;
 }
 

@@ -88,14 +88,19 @@ def get_storage() -> StorageProvider:
 
 @router.post("/upload", response_model=ImageRead, status_code=status.HTTP_201_CREATED)
 async def upload_image(
-    report_id: str = Form(...),
+    report_id: str | None = Form(default=None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     storage: StorageProvider = Depends(get_storage),
     current_user: User = Depends(get_current_user),
 ) -> ImageRead:
     """
-    Accept a multipart image upload, extract EXIF, and attach it to a report.
+    Accept a multipart image upload and extract EXIF.
+
+    report_id is optional. The interactive create flow uploads the image WITHOUT
+    a report (it is created only when the reporter submits), so the image is
+    "staged" with report_id=None and linked to the report at creation time.
+    When report_id IS supplied it must reference an existing report.
 
     The original filename is preserved in the DB for display and audit purposes
     but is never used as the on-disk path — a UUID is used instead to prevent
@@ -113,9 +118,10 @@ async def upload_image(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
+    if report_id is not None:
+        report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
+        if not report:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
     safe_original = Path(file.filename or "unknown").name
     storage_filename = f"{uuid4()}.{fmt.lower()}"
@@ -173,10 +179,15 @@ async def analyze_image(
     suggested_category = analyze_image_with_claude(file_bytes, media_type)
 
     if suggested_category:
-        report = db.query(ReportModel).filter(ReportModel.id == image.report_id).first()
-        if report:
-            report.ai_category = suggested_category
-            db.commit()
+        # Persist on the image so the suggestion survives until the report is
+        # created (it is copied onto report.ai_category at creation time).
+        image.ai_category = suggested_category
+        # If already linked to a report, mirror it there immediately too.
+        if image.report_id:
+            report = db.query(ReportModel).filter(ReportModel.id == image.report_id).first()
+            if report:
+                report.ai_category = suggested_category
+        db.commit()
 
     return AnalysisResult(
         image_id=image_id,
@@ -184,6 +195,33 @@ async def analyze_image(
         ai_category=suggested_category,
         analysis_available=suggested_category is not None,
     )
+
+
+@router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_staged_image(
+    image_id: str,
+    db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete a staged image that was never linked to a report.
+
+    Used by the create flow to clean up immediately when the user abandons it.
+    Refuses (409) to delete an image already attached to a report — those are
+    evidence and must be removed via the report, not here.
+    """
+    image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
+    if not image:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="התמונה לא נמצאה.")
+    if image.report_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="לא ניתן למחוק תמונה שכבר משויכת לדיווח.",
+        )
+    storage.delete(image.file_path)
+    db.delete(image)
+    db.commit()
 
 
 @router.get("/{image_id}", response_model=ImageRead)

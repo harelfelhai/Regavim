@@ -19,12 +19,14 @@ class ImageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    report_id: str
+    # None while the image is staged (uploaded before its report is created).
+    report_id: Optional[str] = None
     file_path: str
     original_filename: str
     exif_data: Optional[dict[str, Any]] = None
     # True when GPS coordinates or DateTimeOriginal were found in EXIF.
     has_exif: bool
+    ai_category: Optional[str] = None
     uploaded_at: datetime
 
 
@@ -39,7 +41,8 @@ class AnalysisResult(BaseModel):
     """
 
     image_id: str
-    report_id: str
+    # None while the image has not yet been linked to a report.
+    report_id: Optional[str] = None
     # The suggested violation category. None when analysis was unavailable.
     ai_category: Optional[str]
     # False on timeout, API error, unsupported format, or invalid AI response.

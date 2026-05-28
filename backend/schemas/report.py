@@ -17,7 +17,13 @@ from backend.core.constants import ReportStatus, ViolationCategory
 
 
 class ReportCreate(BaseModel):
-    """Payload for POST /api/v1/reports/."""
+    """
+    Payload for POST /api/v1/reports/.
+
+    The report is created in one atomic step when the reporter submits:
+    final_category (when present) advances the report straight to 'confirmed',
+    and image_id links a previously-uploaded staged image to the new report.
+    """
 
     description: Optional[str] = None
     observed_at: Optional[datetime] = None
@@ -27,6 +33,9 @@ class ReportCreate(BaseModel):
     target_lng: Optional[float] = None
     land_context: Optional[str] = None
     tags: list[str] = []
+    final_category: Optional[ViolationCategory] = None
+    # ID of a staged image (uploaded with no report) to attach to this report.
+    image_id: Optional[str] = None
 
     @field_validator("user_lat", "target_lat")
     @classmethod

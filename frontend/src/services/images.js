@@ -15,16 +15,15 @@ export function getImageFileUrl(imageId) {
 }
 
 /**
- * Upload an image file and attach it to an existing report.
+ * Upload an image file as a staged image (not yet linked to any report).
+ * The report is created later, on submit, and the image is linked then.
  * Uses multipart/form-data — axios detects FormData and sets the boundary header.
  *
- * @param {string} reportId  - ID of the report to attach the image to
- * @param {File}   file      - The image file chosen by the user
+ * @param {File} file - The image file chosen by the user
  * @returns {Promise<Object>} ImageRead — includes `id` (image_id) and `has_exif`
  */
-export async function uploadImage(reportId, file) {
+export async function uploadImage(file) {
   const formData = new FormData();
-  formData.append('report_id', reportId);
   formData.append('file', file);
   // Override the 10 s instance default. 120 s covers up to 10 MB on slow
   // mobile uplinks (~700 Kbps) with comfortable headroom for handshake and
@@ -33,6 +32,17 @@ export async function uploadImage(reportId, file) {
     timeout: 120_000,
   });
   return data;
+}
+
+/**
+ * Delete a staged image that was never linked to a report — used to clean up
+ * when the user abandons the create flow. Best-effort; a 409 (already linked)
+ * or 404 is ignored by callers.
+ *
+ * @param {string} imageId - ID returned by uploadImage
+ */
+export async function deleteImage(imageId) {
+  await api.delete(`/api/v1/images/${imageId}`);
 }
 
 /**

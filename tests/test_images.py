@@ -137,6 +137,14 @@ def _upload(client, report_id: str, image_bytes: bytes, filename: str = "photo.j
     )
 
 
+def _upload_staged(client, image_bytes: bytes, filename: str = "photo.jpg"):
+    """Upload with no report_id — image is staged until a report is created."""
+    return client.post(
+        "/api/v1/images/upload",
+        files={"file": (filename, image_bytes, "image/jpeg")},
+    )
+
+
 # ── Happy path ────────────────────────────────────────────────────────────────
 
 class TestUploadHappyPath:
@@ -449,3 +457,118 @@ class TestFileEndpoint:
         image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
         report = upload_client.get(f"/api/v1/reports/{report_id}").json()
         assert image_id in report["image_ids"]
+
+
+# ── Staged images (deferred report creation) ──────────────────────────────────
+
+class TestStagedImages:
+    def test_upload_without_report_id_is_staged(self, upload_client):
+        data = _upload_staged(upload_client, jpeg_no_exif()).json()
+        assert data["report_id"] is None
+
+    def test_create_report_with_image_id_links_image(self, upload_client):
+        image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]
+        report = upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "x", "final_category": "DEMOLITION", "image_id": image_id},
+        ).json()
+        assert image_id in report["image_ids"]
+        assert report["status"] == "confirmed"
+
+    @patch("backend.api.v1.images.analyze_image_with_claude")
+    def test_ai_category_copied_to_report_on_create(self, mock_analyze, upload_client):
+        mock_analyze.return_value = "ROAD_PAVING"
+        image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]
+        upload_client.post("/api/v1/images/analyze", data={"image_id": image_id})
+        report = upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "x", "final_category": "ROAD_PAVING", "image_id": image_id},
+        ).json()
+        assert report["ai_category"] == "ROAD_PAVING"
+
+    def test_create_report_with_already_linked_image_returns_409(self, upload_client):
+        image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]
+        upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "x", "final_category": "OTHER", "image_id": image_id},
+        )
+        second = upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "y", "final_category": "OTHER", "image_id": image_id},
+        )
+        assert second.status_code == 409
+
+    def test_create_report_with_nonexistent_image_returns_404(self, upload_client):
+        resp = upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "x", "final_category": "OTHER", "image_id": "no-such-image"},
+        )
+        assert resp.status_code == 404
+
+    def test_confirmed_create_requires_description(self, upload_client):
+        resp = upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "", "final_category": "OTHER"},
+        )
+        assert resp.status_code == 422
+
+    def test_delete_staged_image(self, upload_client):
+        image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]
+        resp = upload_client.delete(f"/api/v1/images/{image_id}")
+        assert resp.status_code == 204
+        assert upload_client.get(f"/api/v1/images/{image_id}").status_code == 404
+
+    def test_cannot_delete_linked_image(self, upload_client):
+        image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]
+        upload_client.post(
+            "/api/v1/reports/",
+            json={"description": "x", "final_category": "OTHER", "image_id": image_id},
+        )
+        resp = upload_client.delete(f"/api/v1/images/{image_id}")
+        assert resp.status_code == 409
+
+
+# ── Orphan-image reaper ───────────────────────────────────────────────────────
+
+class TestOrphanReaper:
+    def _make_image(self, db, storage, *, report_id, age_hours, name):
+        from datetime import datetime, timedelta, timezone
+        from backend.models.image import Image as ImageModel
+
+        img = ImageModel(
+            report_id=report_id,
+            file_path=storage.save(name, b"data"),
+            original_filename=name,
+            has_exif=False,
+            uploaded_at=datetime.now(timezone.utc) - timedelta(hours=age_hours),
+        )
+        db.add(img)
+        db.commit()
+        return img
+
+    def test_reaps_old_orphan_and_removes_file(self, db, tmp_path):
+        from datetime import timedelta
+        from backend.models.image import Image as ImageModel
+        from backend.services.image_cleanup import delete_orphan_images
+
+        storage = LocalStorageProvider(tmp_path)
+        img = self._make_image(db, storage, report_id=None, age_hours=48, name="old.jpg")
+        file_path = img.file_path
+
+        removed = delete_orphan_images(db, storage, timedelta(hours=24))
+        assert removed == 1
+        assert db.query(ImageModel).count() == 0
+        assert not Path(file_path).exists()
+
+    def test_keeps_recent_orphan_and_linked_image(self, db, tmp_path):
+        from datetime import timedelta
+        from backend.models.image import Image as ImageModel
+        from backend.services.image_cleanup import delete_orphan_images
+
+        storage = LocalStorageProvider(tmp_path)
+        self._make_image(db, storage, report_id=None, age_hours=1, name="recent.jpg")
+        self._make_image(db, storage, report_id="some-report", age_hours=48, name="linked.jpg")
+
+        removed = delete_orphan_images(db, storage, timedelta(hours=24))
+        assert removed == 0
+        assert db.query(ImageModel).count() == 2

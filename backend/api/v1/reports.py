@@ -5,7 +5,11 @@ All endpoints require a valid Bearer token (get_current_user dependency).
 create_report uses current_user.id instead of the former placeholder constant.
 
 Lifecycle transitions:
-  POST /         → status = pending
+  POST /         → status = confirmed when final_category is supplied (the
+                   interactive submit), otherwise pending; links a staged image
+                   when image_id is supplied. This is the first time anything is
+                   persisted — the image is uploaded/analysed beforehand with no
+                   report.
   PATCH /{id}    → coordinator sets final_category → auto-advances to confirmed
   PATCH /{id}    → coordinator/admin sets status = deletion_requested
   DELETE /{id}   → soft-delete (status = rejected; row retained for audit)
@@ -15,18 +19,17 @@ Lifecycle transitions:
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user
-from backend.api.v1.images import get_storage
 from backend.core.constants import ReportStatus, ViolationCategory
 from backend.db.session import get_db
+from backend.models.image import Image as ImageModel
 from backend.models.report import Report as ReportModel
 from backend.models.user import User
 from backend.schemas.report import ReportCreate, ReportRead, ReportUpdate
 from backend.services.report_service import apply_report_filters
-from backend.services.storage import StorageProvider
 
 router = APIRouter()
 
@@ -34,24 +37,58 @@ router = APIRouter()
 @router.post("/", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
 def create_report(
     payload: ReportCreate,
-    draft: bool = Query(
-        default=False,
-        description=(
-            "Open the report as a hidden draft. The interactive multi-step "
-            "create flow uses this so a report only becomes visible once the "
-            "reporter submits — and abandoned drafts can be hard-deleted."
-        ),
-    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Open a new report owned by the authenticated user."""
-    report = ReportModel(
-        user_id=current_user.id,
-        status=ReportStatus.DRAFT.value if draft else ReportStatus.PENDING.value,
-        **payload.model_dump(),
+    """
+    Create a report owned by the authenticated user.
+
+    Nothing is persisted before this call — the interactive flow uploads and
+    analyses the image with no report, then creates the whole record here when
+    the reporter submits. When final_category is provided the report is created
+    directly as 'confirmed'; when image_id is provided the staged image is
+    linked and its AI suggestion copied onto the report.
+    """
+    data = payload.model_dump()
+    image_id = data.pop("image_id", None)
+    # Coerce the str-enum to its plain string value for the String column.
+    if hasattr(data.get("final_category"), "value"):
+        data["final_category"] = data["final_category"].value
+    final_category = data.get("final_category")
+
+    image = None
+    if image_id is not None:
+        image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
+        if not image:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="התמונה לא נמצאה.")
+        if image.report_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="התמונה כבר משויכת לדיווח אחר.",
+            )
+
+    status_value = (
+        ReportStatus.CONFIRMED.value if final_category else ReportStatus.PENDING.value
     )
+
+    # A confirmed report must carry a description (same rule as PATCH).
+    if status_value == ReportStatus.CONFIRMED.value and not (
+        data.get("description") and data["description"].strip()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="נדרש תיאור כדי לאשר דיווח.",
+        )
+
+    report = ReportModel(user_id=current_user.id, status=status_value, **data)
+    if image is not None and image.ai_category:
+        report.ai_category = image.ai_category
     db.add(report)
+    db.flush()  # assign report.id before linking the image
+
+    if image is not None:
+        image.report_id = report.id
+
     db.commit()
     db.refresh(report)
     return report
@@ -102,13 +139,8 @@ def list_reports(
     category matches either ai_category or final_category.
     date_from / date_to accept ISO 8601 datetime strings.
     tag filters to reports that contain the exact tag string.
-
-    Drafts (reports still being composed) are hidden unless explicitly requested
-    via ?status=draft, so abandoned half-finished reports never reach the map.
     """
     query = db.query(ReportModel)
-    if status is None:
-        query = query.filter(ReportModel.status != ReportStatus.DRAFT.value)
     query = apply_report_filters(
         query,
         status=status.value if status else None,
@@ -204,34 +236,15 @@ def update_report(
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_report(
     report_id: str,
-    force: bool = Query(default=False),
     db: Session = Depends(get_db),
-    storage: StorageProvider = Depends(get_storage),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Delete a report.
-
-    Without ?force=true: soft-delete (status → rejected). Row retained for audit.
-    With ?force=true: hard-delete a draft. Only allowed while the report is still
-    a draft (never submitted). Any attached evidence files are removed from
-    storage too, so abandoning the create flow leaves nothing behind.
+    Soft-delete a report (status → rejected). The row is retained for audit.
     """
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
-    if force:
-        if report.status != ReportStatus.DRAFT.value:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="מחיקה מאולצת מותרת רק לטיוטות שטרם נשלחו.",
-            )
-        # Remove evidence files before the cascade drops the Image rows.
-        for image in report.images:
-            storage.delete(image.file_path)
-        db.delete(report)
-    else:
-        report.status = ReportStatus.REJECTED.value
-
+    report.status = ReportStatus.REJECTED.value
     db.commit()

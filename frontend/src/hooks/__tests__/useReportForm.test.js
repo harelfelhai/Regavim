@@ -1,18 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useReportForm, STEP } from '../useReportForm';
-import { createReport, patchReport, deleteReport } from '../../services/reports';
-import { uploadImage, analyzeImage } from '../../services/images';
+import { createReport } from '../../services/reports';
+import { uploadImage, analyzeImage, deleteImage } from '../../services/images';
 
 vi.mock('../../services/reports', () => ({
   createReport: vi.fn(),
-  patchReport: vi.fn(),
-  deleteReport: vi.fn(),
 }));
 
 vi.mock('../../services/images', () => ({
   uploadImage: vi.fn(),
   analyzeImage: vi.fn(),
+  deleteImage: vi.fn(),
 }));
 
 // Suppress URL.createObjectURL not implemented in jsdom
@@ -31,13 +30,12 @@ describe('useReportForm — initial state', () => {
   });
 });
 
-describe('useReportForm — successful file upload flow', () => {
+describe('useReportForm — staged upload + analysis flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createReport.mockResolvedValue({ id: 'report-1' });
     uploadImage.mockResolvedValue({ id: 'img-1' });
     analyzeImage.mockResolvedValue({ ai_category: 'ILLEGAL_CONSTRUCTION', analysis_available: true });
-    deleteReport.mockResolvedValue(undefined);
+    deleteImage.mockResolvedValue(undefined);
   });
 
   it('sets imagePreview immediately when file is picked', async () => {
@@ -61,40 +59,23 @@ describe('useReportForm — successful file upload flow', () => {
     expect(result.current.analysisAvailable).toBe(true);
   });
 
-  it('calls createReport, uploadImage, analyzeImage in order', async () => {
+  it('uploads a staged image (no report) then analyzes — no createReport yet', async () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
-    expect(createReport).toHaveBeenCalledWith({}, { draft: true });
-    expect(uploadImage).toHaveBeenCalledWith('report-1', mockFile);
+    expect(uploadImage).toHaveBeenCalledWith(mockFile);
     expect(analyzeImage).toHaveBeenCalledWith('img-1');
+    expect(createReport).not.toHaveBeenCalled();
   });
 });
 
 describe('useReportForm — error handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    deleteReport.mockResolvedValue(undefined);
-  });
-
-  it('transitions to ERROR when createReport fails', async () => {
-    createReport.mockRejectedValue(new Error('Server error'));
-    const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
-    await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    expect(result.current.error).toBe('Server error');
-  });
-
-  it('does not attempt cleanup when createReport itself fails (no report ID yet)', async () => {
-    createReport.mockRejectedValue(new Error('Server error'));
-    const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
-    await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    expect(deleteReport).not.toHaveBeenCalled();
+    deleteImage.mockResolvedValue(undefined);
   });
 
   it('transitions to ERROR when uploadImage fails', async () => {
-    createReport.mockResolvedValue({ id: 'report-1' });
     uploadImage.mockRejectedValue(new Error('Upload error'));
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
@@ -102,40 +83,25 @@ describe('useReportForm — error handling', () => {
     expect(result.current.error).toBe('Upload error');
   });
 
-  it('attempts force-delete cleanup when uploadImage fails', async () => {
-    createReport.mockResolvedValue({ id: 'report-1' });
+  it('does not delete an image when upload itself fails (no image ID yet)', async () => {
     uploadImage.mockRejectedValue(new Error('Upload error'));
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    await waitFor(() => expect(deleteReport).toHaveBeenCalledWith('report-1', { force: true }));
+    expect(deleteImage).not.toHaveBeenCalled();
   });
 
-  it('falls back to soft-delete when force-delete is rejected (image already attached)', async () => {
-    createReport.mockResolvedValue({ id: 'report-1' });
-    uploadImage.mockResolvedValue({ id: 'img-1' });
-    analyzeImage.mockRejectedValue(new Error('AI error'));
-    deleteReport.mockRejectedValueOnce(new Error('conflict')).mockResolvedValue(undefined);
-    const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
-    await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    await waitFor(() => expect(deleteReport).toHaveBeenCalledTimes(2));
-    expect(deleteReport).toHaveBeenNthCalledWith(1, 'report-1', { force: true });
-    expect(deleteReport).toHaveBeenNthCalledWith(2, 'report-1');
-  });
-
-  it('transitions to ERROR when analyzeImage fails', async () => {
-    createReport.mockResolvedValue({ id: 'report-1' });
+  it('deletes the staged image when analysis fails', async () => {
     uploadImage.mockResolvedValue({ id: 'img-1' });
     analyzeImage.mockRejectedValue(new Error('AI error'));
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    expect(result.current.error).toBe('AI error');
+    await waitFor(() => expect(deleteImage).toHaveBeenCalledWith('img-1'));
   });
 
   it('uses fallback message when error has no message', async () => {
-    createReport.mockRejectedValue({});
+    uploadImage.mockRejectedValue({});
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
@@ -146,11 +112,10 @@ describe('useReportForm — error handling', () => {
 describe('useReportForm — submit flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createReport.mockResolvedValue({ id: 'report-1' });
     uploadImage.mockResolvedValue({ id: 'img-1' });
     analyzeImage.mockResolvedValue({ ai_category: 'ROAD_PAVING', analysis_available: true });
-    patchReport.mockResolvedValue({ id: 'report-1', status: 'confirmed' });
-    deleteReport.mockResolvedValue(undefined);
+    createReport.mockResolvedValue({ id: 'report-1', status: 'confirmed' });
+    deleteImage.mockResolvedValue(undefined);
   });
 
   it('transitions READY → SUBMITTING → DONE', async () => {
@@ -162,15 +127,28 @@ describe('useReportForm — submit flow', () => {
     await waitFor(() => expect(result.current.step).toBe(STEP.DONE));
   });
 
-  it('calls patchReport with description and final_category', async () => {
+  it('creates the report with metadata, image_id, description, category, and tags', async () => {
     const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
+    act(() => {
+      result.current.handleFileChange(mockFile, {
+        userLat: 31.5, userLng: 34.9, targetLat: 31.6, targetLng: 35.0,
+        observedAt: '2024-01-01T00:00:00.000Z',
+      });
+    });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
-    await act(() => result.current.handleSubmit({ description: 'observed', finalCategory: 'ROAD_PAVING' }));
-    expect(patchReport).toHaveBeenCalledWith('report-1', {
+    await act(() => result.current.handleSubmit({
+      description: 'observed', finalCategory: 'ROAD_PAVING', tags: ['פרשייה א'],
+    }));
+    expect(createReport).toHaveBeenCalledWith({
       description: 'observed',
-      status: 'confirmed',
+      image_id: 'img-1',
+      user_lat: 31.5,
+      user_lng: 34.9,
+      target_lat: 31.6,
+      target_lng: 35.0,
+      observed_at: '2024-01-01T00:00:00.000Z',
       final_category: 'ROAD_PAVING',
+      tags: ['פרשייה א'],
     });
   });
 
@@ -179,30 +157,41 @@ describe('useReportForm — submit flow', () => {
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
     await act(() => result.current.handleSubmit({ description: 'observed', finalCategory: null }));
-    expect(patchReport).toHaveBeenCalledWith('report-1', {
-      description: 'observed',
-      status: 'confirmed',
-    });
+    expect(createReport).toHaveBeenCalledWith({ description: 'observed', image_id: 'img-1' });
+  });
+
+  it('does nothing when there is no staged image', async () => {
+    const { result } = renderHook(() => useReportForm());
+    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
+    expect(createReport).not.toHaveBeenCalled();
   });
 
   it('transitions to ERROR on submit failure', async () => {
-    patchReport.mockRejectedValue(new Error('Patch error'));
+    createReport.mockRejectedValue(new Error('Create error'));
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
-    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: null }));
+    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
     expect(result.current.step).toBe(STEP.ERROR);
-    expect(result.current.error).toBe('Patch error');
+    expect(result.current.error).toBe('Create error');
+  });
+
+  it('does not delete the image after a successful submit (now linked)', async () => {
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    await waitFor(() => expect(result.current.step).toBe(STEP.READY));
+    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
+    act(() => { result.current.cancelAndCleanup(); });
+    expect(deleteImage).not.toHaveBeenCalled();
   });
 });
 
 describe('useReportForm — reset', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createReport.mockResolvedValue({ id: 'report-1' });
     uploadImage.mockResolvedValue({ id: 'img-1' });
     analyzeImage.mockResolvedValue({ ai_category: 'ROAD_PAVING', analysis_available: true });
-    deleteReport.mockResolvedValue(undefined);
+    deleteImage.mockResolvedValue(undefined);
   });
 
   it('restores IDLE state and clears all fields', async () => {
@@ -220,10 +209,9 @@ describe('useReportForm — reset', () => {
 describe('useReportForm — cancelAndCleanup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createReport.mockResolvedValue({ id: 'report-1' });
     uploadImage.mockResolvedValue({ id: 'img-1' });
     analyzeImage.mockResolvedValue({ ai_category: 'ROAD_PAVING', analysis_available: true });
-    deleteReport.mockResolvedValue(undefined);
+    deleteImage.mockResolvedValue(undefined);
   });
 
   it('resets to IDLE when called from READY state', async () => {
@@ -236,28 +224,17 @@ describe('useReportForm — cancelAndCleanup', () => {
     expect(result.current.aiCategory).toBeNull();
   });
 
-  it('calls deleteReport with force:true when a report ID exists', async () => {
+  it('deletes the staged image when one exists', async () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
     act(() => { result.current.cancelAndCleanup(); });
-    await waitFor(() => expect(deleteReport).toHaveBeenCalledWith('report-1', { force: true }));
+    await waitFor(() => expect(deleteImage).toHaveBeenCalledWith('img-1'));
   });
 
-  it('does not call deleteReport when no report exists (IDLE state)', () => {
+  it('does not call deleteImage when no image exists (IDLE state)', () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.cancelAndCleanup(); });
-    expect(deleteReport).not.toHaveBeenCalled();
-  });
-
-  it('falls back to soft-delete when force-delete is rejected', async () => {
-    deleteReport.mockRejectedValueOnce(new Error('conflict')).mockResolvedValue(undefined);
-    const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
-    await waitFor(() => expect(result.current.step).toBe(STEP.READY));
-    act(() => { result.current.cancelAndCleanup(); });
-    await waitFor(() => expect(deleteReport).toHaveBeenCalledTimes(2));
-    expect(deleteReport).toHaveBeenNthCalledWith(1, 'report-1', { force: true });
-    expect(deleteReport).toHaveBeenNthCalledWith(2, 'report-1');
+    expect(deleteImage).not.toHaveBeenCalled();
   });
 });

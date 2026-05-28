@@ -47,5 +47,14 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
 
+    # Orphan-image reaper — deletes staged images (uploaded but never linked to a
+    # report) older than this many hours. See backend/services/image_cleanup.py.
+    ORPHAN_IMAGE_TTL_HOURS: int = 24
+
+    # Set to true ONCE a periodic scheduler (cron / Celery beat / K8s CronJob)
+    # has been configured to run backend/cleanup_orphan_images.py in production.
+    # While false, the app reaps only on startup and warns loudly on every boot.
+    IMAGE_REAPER_SCHEDULED: bool = False
+
 
 settings = Settings()
