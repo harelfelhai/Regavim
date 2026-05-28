@@ -11,9 +11,12 @@ Interactive API docs available at:
 import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import backend.models  # noqa: F401 — registers all ORM models with SQLAlchemy metadata
 from backend.api.v1 import auth, images, reports
@@ -24,6 +27,11 @@ from backend.db.session import SessionLocal, engine
 from backend.services.image_cleanup import delete_orphan_images
 
 logger = logging.getLogger(__name__)
+
+# Built frontend (Vite `npm run build` output). When present, FastAPI serves the
+# SPA itself so the whole app is a single origin reachable from one HTTPS URL —
+# no separate dev server and no CORS needed (the MVP-from-a-phone setup).
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 def _reap_orphan_images_on_startup() -> None:
@@ -92,3 +100,38 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 @app.get("/health", tags=["health"])
 def health_check():
     return {"status": "ok"}
+
+
+# ── Serve the built SPA (production / phone MVP) ─────────────────────────────
+# Registered AFTER the API routers so /api/*, /health, /docs always win. Only
+# active when a build exists; in local dev you run Vite separately and this is
+# skipped, so nothing here interferes with the dev proxy setup.
+if _FRONTEND_DIST.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=_FRONTEND_DIST / "assets"),
+        name="assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        """
+        SPA history-mode fallback. React Router uses BrowserRouter, so a hard
+        refresh on a client route (e.g. /map) hits the server — return the real
+        file if one exists (favicon, manifest, icons), otherwise index.html so
+        the client router can take over.
+        """
+        # Never let the catch-all swallow an unmatched API path — that should 404.
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = _FRONTEND_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_FRONTEND_DIST / "index.html")
+else:
+    logger.warning(
+        "No frontend build found at %s — serving API only. Run "
+        "`cd frontend && npm run build` to serve the SPA from this server "
+        "(single-origin setup for phone/production).",
+        _FRONTEND_DIST,
+    )
