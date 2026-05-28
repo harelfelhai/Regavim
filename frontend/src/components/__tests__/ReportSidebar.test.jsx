@@ -103,12 +103,7 @@ describe('ReportSidebar — category reflection', () => {
     expect(screen.getByText('הריסה')).toBeInTheDocument();
   });
 
-  it('falls back to the AI category when no final category is set', () => {
-    render(<ReportSidebar reports={[{ ...PENDING, ai_category: 'LAND_GRADING' }]} />);
-    expect(screen.getByText('עבודות עפר')).toBeInTheDocument();
-  });
-
-  it('shows "ללא קטגוריה" when neither category is present', () => {
+  it('shows "ללא קטגוריה" when no category is present', () => {
     render(<ReportSidebar reports={[PENDING]} />);
     expect(screen.getByText(/ללא קטגוריה/)).toBeInTheDocument();
   });

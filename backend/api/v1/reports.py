@@ -81,8 +81,6 @@ def create_report(
         )
 
     report = ReportModel(user_id=current_user.id, status=status_value, **data)
-    if image is not None and image.ai_category:
-        report.ai_category = image.ai_category
     db.add(report)
     db.flush()  # assign report.id before linking the image
 

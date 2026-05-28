@@ -44,8 +44,6 @@ beforeEach(() => {
 const defaultHook = {
   step: STEP.IDLE,
   imagePreview: null,
-  aiCategory: null,
-  analysisAvailable: false,
   error: null,
   handleFileChange: vi.fn(),
   handleSubmit: vi.fn(),
@@ -238,18 +236,13 @@ describe('ReportForm — busy overlay', () => {
     expect(screen.getByText('מעלה תמונה...')).toBeInTheDocument();
   });
 
-  it('shows analyzing label during ANALYZING step', () => {
-    renderForm({ step: STEP.ANALYZING, imagePreview: 'blob:x' });
-    expect(screen.getByText('מנתח עם AI...')).toBeInTheDocument();
-  });
-
   it('shows submitting label during SUBMITTING step', () => {
     renderForm({ step: STEP.SUBMITTING, imagePreview: 'blob:x' });
     expect(screen.getByText('שולח דיווח...')).toBeInTheDocument();
   });
 
   it('renders the image preview element', () => {
-    renderForm({ step: STEP.ANALYZING, imagePreview: 'blob:x' });
+    renderForm({ step: STEP.UPLOADING, imagePreview: 'blob:x' });
     expect(screen.getByAltText('תצוגה מקדימה של התמונה הנבחרת')).toBeInTheDocument();
   });
 });
@@ -289,22 +282,16 @@ describe('ReportForm — ready state', () => {
   const readyHook = {
     step: STEP.READY,
     imagePreview: 'blob:x',
-    aiCategory: 'ROAD_PAVING',
-    analysisAvailable: true,
     error: null,
     handleFileChange: vi.fn(),
     handleSubmit: vi.fn(),
     cancelAndCleanup: vi.fn(),
   };
 
-  it('shows AI suggestion label', () => {
+  it('shows the category select', () => {
     renderForm(readyHook);
-    expect(screen.getByText('הצעת AI')).toBeInTheDocument();
-  });
-
-  it('pre-fills category select with aiCategory', () => {
-    renderForm(readyHook);
-    expect(screen.getByRole('combobox')).toHaveValue('ROAD_PAVING');
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveValue('');
   });
 
   it('shows the description textarea', () => {
@@ -319,26 +306,23 @@ describe('ReportForm — ready state', () => {
 
   it('Submit button is enabled when a category is selected', () => {
     renderForm(readyHook);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'ROAD_PAVING' } });
     expect(screen.getByRole('button', { name: 'שלח דיווח' })).not.toBeDisabled();
   });
 
   it('Submit button is disabled when no category is selected', () => {
-    renderForm({ ...readyHook, aiCategory: null });
+    renderForm(readyHook);
     expect(screen.getByRole('button', { name: 'שלח דיווח' })).toBeDisabled();
   });
 
   it('calls handleSubmit on form submit', () => {
     const handleSubmit = vi.fn().mockResolvedValue(true);
     renderForm({ ...readyHook, handleSubmit });
-    // Category is pre-filled (ROAD_PAVING), so description is required.
+    // Select a category first (makes description required), then add description.
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'ROAD_PAVING' } });
     fireEvent.change(screen.getByPlaceholderText('תאר/י את שנצפה...'), { target: { value: 'test description' } });
     fireEvent.submit(screen.getByRole('button', { name: 'שלח דיווח' }).closest('form'));
     expect(handleSubmit).toHaveBeenCalled();
-  });
-
-  it('shows "AI לא זמין" label when analysisAvailable is false', () => {
-    renderForm({ ...readyHook, analysisAvailable: false, aiCategory: null });
-    expect(screen.getByText('AI לא זמין — אנא סווג/י')).toBeInTheDocument();
   });
 });
 

@@ -24,15 +24,12 @@ def apply_report_filters(
     """
     Chain WHERE clauses onto a base Report query.
 
-    category matches either ai_category or final_category — both are
-    violation category fields coordinators may want to filter on.
+    category matches final_category.
     """
     if status is not None:
         query = query.filter(ReportModel.status == status)
     if category is not None:
-        query = query.filter(
-            (ReportModel.ai_category == category) | (ReportModel.final_category == category)
-        )
+        query = query.filter(ReportModel.final_category == category)
     if date_from is not None:
         query = query.filter(ReportModel.created_at >= date_from)
     if date_to is not None:

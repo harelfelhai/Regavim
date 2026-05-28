@@ -23,7 +23,6 @@ class TestCreateReport:
     def test_response_has_expected_fields(self, client):
         data = client.post("/api/v1/reports/", json=_VALID_PAYLOAD).json()
         assert data["status"] == "pending"
-        assert data["ai_category"] is None
         assert data["final_category"] is None
         assert data["user_lat"] == 31.5
         assert data["target_lat"] == 31.6

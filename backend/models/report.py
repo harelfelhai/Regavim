@@ -19,10 +19,6 @@ class Report(Base):
       target_lat / target_lng — map-pinned location of the violation itself
 
     These two locations are legally distinct and must both be stored.
-
-    AI classification fields:
-      ai_category    — raw suggestion returned by Claude (may be None if analysis failed)
-      final_category — human-confirmed category; always set by the coordinator before approval
     """
 
     __tablename__ = "reports"
@@ -45,7 +41,6 @@ class Report(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=ReportStatus.PENDING.value
     )
-    ai_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     final_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 

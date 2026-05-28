@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { createReport } from '../services/reports';
-import { uploadImage, analyzeImage, deleteImage } from '../services/images';
+import { uploadImage, deleteImage } from '../services/images';
 
 export const STEP = {
   IDLE:        'idle',
   UPLOADING:   'uploading',
-  ANALYZING:   'analyzing',
   READY:       'ready',
   ERROR:       'error',
   SUBMITTING:  'submitting',
@@ -15,13 +14,12 @@ export const STEP = {
 /**
  * Manages the full create-report flow:
  *   idle → uploading (upload a STAGED image — no report yet)
- *        → analyzing (call Claude)
- *        → ready (show AI suggestion)
+ *        → ready (show category selector for manual classification)
  *        → submitting (create the report and link the staged image)
  *        → done
  *
  * Nothing is persisted as a report until the user submits. The image is staged
- * (report_id = null) during upload/analysis; if the flow is abandoned the staged
+ * (report_id = null) during upload; if the flow is abandoned the staged
  * image is deleted (best-effort) and, as a safety net, reaped server-side later.
  *
  * handleFileChange accepts an optional `meta` object from the form component
@@ -33,8 +31,6 @@ export function useReportForm() {
   const [imagePreview, setImagePreview] = useState(null);
   const [imageId, setImageId]         = useState(null);
   const [reportId, setReportId]       = useState(null);
-  const [aiCategory, setAiCategory]   = useState(null);
-  const [analysisAvailable, setAnalysisAvailable] = useState(false);
   const [error, setError]             = useState(null);
 
   // Metadata captured at file-pick time, carried until the report is created.
@@ -48,8 +44,8 @@ export function useReportForm() {
   }, [imagePreview]);
 
   /**
-   * Upload the chosen file as a staged image and run AI analysis. No report is
-   * created here. `meta` is stored for use at submit time.
+   * Upload the chosen file as a staged image. No report is created here.
+   * `meta` is stored for use at submit time.
    *
    * @param {File}   file
    * @param {Object} meta - { userLat, userLng, targetLat, targetLng, observedAt }
@@ -60,7 +56,6 @@ export function useReportForm() {
     setImagePreview(URL.createObjectURL(file));
     setStep(STEP.UPLOADING);
     setError(null);
-    setAiCategory(null);
 
     let uploadedImageId = null;
 
@@ -68,12 +63,6 @@ export function useReportForm() {
       const image = await uploadImage(file);
       uploadedImageId = image.id;
       setImageId(image.id);
-
-      setStep(STEP.ANALYZING);
-      const analysis = await analyzeImage(image.id);
-
-      setAiCategory(analysis.ai_category);
-      setAnalysisAvailable(analysis.analysis_available);
       setStep(STEP.READY);
     } catch (err) {
       setError(err?.message ?? 'ההעלאה נכשלה. נסה/י שנית.');
@@ -92,7 +81,7 @@ export function useReportForm() {
    * and link the staged image. This is the FIRST time anything is saved.
    */
   async function handleSubmit({ description, finalCategory, tags }) {
-    if (!imageId) return;
+    if (!imageId) return false;
     setStep(STEP.SUBMITTING);
     setError(null);
 
@@ -125,8 +114,6 @@ export function useReportForm() {
     setImagePreview(null);
     setImageId(null);
     setReportId(null);
-    setAiCategory(null);
-    setAnalysisAvailable(false);
     setError(null);
     metaRef.current = {};
   }
@@ -145,8 +132,6 @@ export function useReportForm() {
   return {
     step,
     imagePreview,
-    aiCategory,
-    analysisAvailable,
     error,
     imageId,
     reportId,

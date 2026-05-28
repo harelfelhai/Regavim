@@ -75,7 +75,7 @@ export default function ReportSidebar({ reports = [], loading, error, onSelectRe
     <ul className="divide-y divide-gray-100" role="list" aria-label="דיווחים">
       {reports.map((report) => {
         const badgeClass = STATUS_BADGE[report.status] ?? 'bg-gray-100 text-gray-500';
-        const category = formatCategory(report.final_category || report.ai_category);
+        const category = formatCategory(report.final_category);
 
         return (
           <li key={report.id}>

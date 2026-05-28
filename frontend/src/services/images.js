@@ -45,21 +45,3 @@ export async function deleteImage(imageId) {
   await api.delete(`/api/v1/images/${imageId}`);
 }
 
-/**
- * Submit an already-uploaded image to Claude for violation category suggestion.
- * The backend reads the file from disk using image_id — the file must exist first.
- *
- * @param {string} imageId - ID returned by uploadImage
- * @returns {Promise<Object>} AnalysisResult — `{ ai_category, analysis_available }`
- */
-export async function analyzeImage(imageId) {
-  const formData = new FormData();
-  formData.append('image_id', imageId);
-  // Claude vision can take 15-40 s on a large image. The 10 s axios default
-  // was triggering false timeouts on perfectly valid uploads. 90 s leaves
-  // ample headroom while still bounding the wait if the API is wedged.
-  const { data } = await api.post('/api/v1/images/analyze', formData, {
-    timeout: 90_000,
-  });
-  return data;
-}

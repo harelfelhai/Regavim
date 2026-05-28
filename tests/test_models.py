@@ -27,12 +27,11 @@ def test_report_default_status_is_pending(db):
     assert report.status == ReportStatus.PENDING.value
 
 
-def test_report_ai_fields_default_to_none(db):
+def test_report_category_and_context_default_to_none(db):
     report = Report(user_id=_USER_ID)
     db.add(report)
     db.commit()
     db.refresh(report)
-    assert report.ai_category is None
     assert report.final_category is None
     assert report.land_context is None
 

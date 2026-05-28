@@ -16,7 +16,6 @@ from backend.core.security import create_access_token
 
 _BASE = "/api/v1/auth"
 _REPORTS = "/api/v1/reports/"
-_IMAGES_ANALYZE = "/api/v1/images/analyze"
 
 
 def _register(client, email="coord@example.com", password="Pass1234!", role="coordinator"):
@@ -150,10 +149,6 @@ class TestEndpointProtection:
 
     def test_create_report_requires_auth(self, auth_client):
         r = auth_client.post(_REPORTS, json={})
-        assert r.status_code == 401
-
-    def test_images_analyze_requires_auth(self, auth_client):
-        r = auth_client.post(_IMAGES_ANALYZE, data={"image_id": "x"})
         assert r.status_code == 401
 
     def test_authenticated_request_reaches_handler(self, auth_client):

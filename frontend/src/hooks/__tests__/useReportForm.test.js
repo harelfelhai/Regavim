@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useReportForm, STEP } from '../useReportForm';
 import { createReport } from '../../services/reports';
-import { uploadImage, analyzeImage, deleteImage } from '../../services/images';
+import { uploadImage, deleteImage } from '../../services/images';
 
 vi.mock('../../services/reports', () => ({
   createReport: vi.fn(),
@@ -10,7 +10,6 @@ vi.mock('../../services/reports', () => ({
 
 vi.mock('../../services/images', () => ({
   uploadImage: vi.fn(),
-  analyzeImage: vi.fn(),
   deleteImage: vi.fn(),
 }));
 
@@ -25,16 +24,14 @@ describe('useReportForm — initial state', () => {
     const { result } = renderHook(() => useReportForm());
     expect(result.current.step).toBe(STEP.IDLE);
     expect(result.current.imagePreview).toBeNull();
-    expect(result.current.aiCategory).toBeNull();
     expect(result.current.error).toBeNull();
   });
 });
 
-describe('useReportForm — staged upload + analysis flow', () => {
+describe('useReportForm — upload flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     uploadImage.mockResolvedValue({ id: 'img-1' });
-    analyzeImage.mockResolvedValue({ ai_category: 'ILLEGAL_CONSTRUCTION', analysis_available: true });
     deleteImage.mockResolvedValue(undefined);
   });
 
@@ -44,27 +41,18 @@ describe('useReportForm — staged upload + analysis flow', () => {
     expect(result.current.imagePreview).toBe('blob:mock-preview');
   });
 
-  it('transitions IDLE → UPLOADING → ANALYZING → READY', async () => {
+  it('transitions IDLE → UPLOADING → READY', async () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     expect(result.current.step).toBe(STEP.UPLOADING);
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
   });
 
-  it('sets aiCategory and analysisAvailable after READY', async () => {
-    const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
-    await waitFor(() => expect(result.current.step).toBe(STEP.READY));
-    expect(result.current.aiCategory).toBe('ILLEGAL_CONSTRUCTION');
-    expect(result.current.analysisAvailable).toBe(true);
-  });
-
-  it('uploads a staged image (no report) then analyzes — no createReport yet', async () => {
+  it('uploads a staged image (no report) — no createReport yet', async () => {
     const { result } = renderHook(() => useReportForm());
     act(() => { result.current.handleFileChange(mockFile); });
     await waitFor(() => expect(result.current.step).toBe(STEP.READY));
     expect(uploadImage).toHaveBeenCalledWith(mockFile);
-    expect(analyzeImage).toHaveBeenCalledWith('img-1');
     expect(createReport).not.toHaveBeenCalled();
   });
 });
@@ -91,15 +79,6 @@ describe('useReportForm — error handling', () => {
     expect(deleteImage).not.toHaveBeenCalled();
   });
 
-  it('deletes the staged image when analysis fails', async () => {
-    uploadImage.mockResolvedValue({ id: 'img-1' });
-    analyzeImage.mockRejectedValue(new Error('AI error'));
-    const { result } = renderHook(() => useReportForm());
-    act(() => { result.current.handleFileChange(mockFile); });
-    await waitFor(() => expect(result.current.step).toBe(STEP.ERROR));
-    await waitFor(() => expect(deleteImage).toHaveBeenCalledWith('img-1'));
-  });
-
   it('uses fallback message when error has no message', async () => {
     uploadImage.mockRejectedValue({});
     const { result } = renderHook(() => useReportForm());
@@ -113,7 +92,6 @@ describe('useReportForm — submit flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     uploadImage.mockResolvedValue({ id: 'img-1' });
-    analyzeImage.mockResolvedValue({ ai_category: 'ROAD_PAVING', analysis_available: true });
     createReport.mockResolvedValue({ id: 'report-1', status: 'confirmed' });
     deleteImage.mockResolvedValue(undefined);
   });
@@ -190,7 +168,6 @@ describe('useReportForm — reset', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     uploadImage.mockResolvedValue({ id: 'img-1' });
-    analyzeImage.mockResolvedValue({ ai_category: 'ROAD_PAVING', analysis_available: true });
     deleteImage.mockResolvedValue(undefined);
   });
 
@@ -201,7 +178,6 @@ describe('useReportForm — reset', () => {
     act(() => { result.current.reset(); });
     expect(result.current.step).toBe(STEP.IDLE);
     expect(result.current.imagePreview).toBeNull();
-    expect(result.current.aiCategory).toBeNull();
     expect(result.current.error).toBeNull();
   });
 });
@@ -210,7 +186,6 @@ describe('useReportForm — cancelAndCleanup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     uploadImage.mockResolvedValue({ id: 'img-1' });
-    analyzeImage.mockResolvedValue({ ai_category: 'ROAD_PAVING', analysis_available: true });
     deleteImage.mockResolvedValue(undefined);
   });
 
@@ -221,7 +196,6 @@ describe('useReportForm — cancelAndCleanup', () => {
     act(() => { result.current.cancelAndCleanup(); });
     expect(result.current.step).toBe(STEP.IDLE);
     expect(result.current.imagePreview).toBeNull();
-    expect(result.current.aiCategory).toBeNull();
   });
 
   it('deletes the staged image when one exists', async () => {

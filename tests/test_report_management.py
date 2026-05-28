@@ -7,7 +7,6 @@ Test matrix (TestPatchReport):
   No auto-confirm  — final_category on non-pending report → status unchanged
   Explicit status  — final_category + status=rejected → explicit status wins
   Clear category   — final_category=null → cleared, no auto-confirm
-  Read-only guard  — sending ai_category in PATCH body → 422
   Not found        — nonexistent report_id → 404
   Empty payload    — all-None patch → 200, nothing changes
 
@@ -19,7 +18,7 @@ Test matrix (TestDeleteReport):
 Test matrix (TestListReportsFiltered):
   Status filter    — pending/confirmed/rejected; no-match → []
   Invalid status   — unknown string → 422
-  Category filter  — matches ai_category; matches final_category; no-match → []
+  Category filter  — matches final_category; no-match → []
   Invalid category — unknown string → 422
   Date range       — date_from; date_to; range with no results → []
   Reporter filter  — matching and non-matching reporter_id
@@ -120,14 +119,6 @@ class TestPatchReport:
         data = _patch(client, report["id"], final_category=None)
         assert data["final_category"] is None
 
-    def test_patch_ai_category_forbidden(self, client):
-        """ai_category is read-only — sending it in the body returns 422."""
-        report = _create(client)
-        response = client.patch(
-            f"/api/v1/reports/{report['id']}", json={"ai_category": "DEMOLITION"}
-        )
-        assert response.status_code == 422
-
     def test_patch_unknown_field_forbidden(self, client):
         """Any field not in ReportUpdate schema returns 422."""
         report = _create(client)
@@ -166,14 +157,6 @@ class TestPatchReport:
         report = _create(client)
         data = _patch(client, report["id"], status="confirmed")
         assert data["status"] == "confirmed"
-
-    def test_patch_ai_category_not_changed_when_sending_known_fields(self, client):
-        """ai_category on the report is untouched by a PATCH to other fields."""
-        report = _create(client)
-        # Manually verify ai_category starts as None
-        assert report["ai_category"] is None
-        data = _patch(client, report["id"], description="Updated description")
-        assert data["ai_category"] is None
 
 
 # ── DELETE (soft-delete) ───────────────────────────────────────────────────────

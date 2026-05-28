@@ -77,7 +77,6 @@ class ReportRead(BaseModel):
     updated_at: datetime
     observed_at: Optional[datetime] = None
     status: ReportStatus
-    ai_category: Optional[str] = None
     final_category: Optional[str] = None
     description: Optional[str] = None
     land_context: Optional[str] = None

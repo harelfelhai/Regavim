@@ -3,7 +3,6 @@ import {
   Camera,
   Images,
   Loader2,
-  Sparkles,
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -82,7 +81,6 @@ function formatCategory(cat) {
 
 const STEP_LABEL = {
   [STEP.UPLOADING]:  'מעלה תמונה...',
-  [STEP.ANALYZING]:  'מנתח עם AI...',
   [STEP.SUBMITTING]: 'שולח דיווח...',
 };
 
@@ -132,19 +130,16 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
   const {
     step,
     imagePreview,
-    aiCategory,
-    analysisAvailable,
     error,
     handleFileChange,
     handleSubmit,
     cancelAndCleanup,
   } = useReportForm();
 
-  const displayedCategory = finalCategory || aiCategory || '';
+  const displayedCategory = finalCategory || '';
 
   const isBusy =
     step === STEP.UPLOADING ||
-    step === STEP.ANALYZING ||
     step === STEP.SUBMITTING;
 
   // ── GPS ─────────────────────────────────────────────────────────────────────
@@ -572,15 +567,9 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null 
 
           {step === STEP.READY && (
             <>
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-                <div className="flex items-center gap-2 text-regavim-blue mb-2">
-                  <Sparkles size={15} />
-                  <span className="text-xs font-semibold uppercase tracking-wide">
-                    {analysisAvailable ? 'הצעת AI' : 'AI לא זמין — אנא סווג/י'}
-                  </span>
-                </div>
-                <label htmlFor="category" className="block text-xs text-gray-500 mb-1">
-                  קטגוריית עבירה
+              <div>
+                <label htmlFor="category" className="block text-xs font-medium text-gray-600 mb-1">
+                  קטגוריית עבירה<span className="text-red-500 mr-0.5">*</span>
                 </label>
                 <select
                   id="category"

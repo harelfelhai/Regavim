@@ -1,5 +1,5 @@
 """
-Image endpoints — upload, EXIF extraction, and AI classification.
+Image endpoints — upload and file serving.
 
 Upload pipeline  (POST /upload):
   1. Read file bytes via UploadFile (async, non-blocking)
@@ -10,18 +10,6 @@ Upload pipeline  (POST /upload):
   6. Save via StorageProvider (swappable — local now, S3 later)
   7. Extract EXIF + determine has_exif flag
   8. Persist Image record and return ImageRead
-
-Analysis pipeline (POST /analyze):
-  1. Fetch Image record by image_id → 404 if not found
-  2. Read stored file bytes from disk
-  3. Call Claude via ai_service — returns None on timeout/error (never raises)
-  4. If valid category returned, update report.ai_category
-  5. Return AnalysisResult (analysis_available=False signals degraded state)
-
-Suggested vs. Confirmed:
-  - POST /analyze  → sets report.ai_category  (AI suggestion)
-  - PATCH /reports/{id} → sets report.final_category (human confirmation, Stage 6)
-  These two fields are ALWAYS set independently.
 """
 
 from pathlib import Path
@@ -37,8 +25,7 @@ from backend.db.session import get_db
 from backend.models.image import Image as ImageModel
 from backend.models.report import Report as ReportModel
 from backend.models.user import User
-from backend.schemas.image import AnalysisResult, ImageRead
-from backend.services.ai_service import analyze_image_with_claude
+from backend.schemas.image import ImageRead
 from backend.services.image_service import (
     exif_has_legal_metadata,
     extract_exif,
@@ -53,7 +40,7 @@ from backend.services.storage import (
 
 router = APIRouter()
 
-# Media type lookup by file extension — used when reading stored files for analysis.
+# Media type lookup by file extension — used when serving stored files.
 _EXT_TO_MEDIA_TYPE: dict[str, str] = {
     ".jpeg": "image/jpeg",
     ".jpg": "image/jpeg",
@@ -142,59 +129,6 @@ async def upload_image(
     db.refresh(image)
 
     return image
-
-
-@router.post("/analyze", response_model=AnalysisResult)
-async def analyze_image(
-    image_id: str = Form(...),
-    db: Session = Depends(get_db),
-    storage: StorageProvider = Depends(get_storage),
-    current_user: User = Depends(get_current_user),
-) -> AnalysisResult:
-    """
-    Submit an already-uploaded image to Claude for violation category suggestion.
-
-    Sets report.ai_category on success. The coordinator confirms (or overrides)
-    via PATCH /api/v1/reports/{id} which sets report.final_category — these are
-    always distinct fields. analysis_available=False means Claude was unavailable;
-    the upload and report are still valid and the coordinator classifies manually.
-    """
-    image = db.query(ImageModel).filter(ImageModel.id == image_id).first()
-    if not image:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="התמונה לא נמצאה.")
-
-    try:
-        file_bytes = storage.read(image.file_path)
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="קובץ התמונה לא נמצא.",
-        )
-
-    # Derive media type from the original filename (works for both local and cloud paths).
-    media_type = _EXT_TO_MEDIA_TYPE.get(
-        Path(image.original_filename).suffix.lower(), "image/jpeg"
-    )
-
-    suggested_category = analyze_image_with_claude(file_bytes, media_type)
-
-    if suggested_category:
-        # Persist on the image so the suggestion survives until the report is
-        # created (it is copied onto report.ai_category at creation time).
-        image.ai_category = suggested_category
-        # If already linked to a report, mirror it there immediately too.
-        if image.report_id:
-            report = db.query(ReportModel).filter(ReportModel.id == image.report_id).first()
-            if report:
-                report.ai_category = suggested_category
-        db.commit()
-
-    return AnalysisResult(
-        image_id=image_id,
-        report_id=image.report_id,
-        ai_category=suggested_category,
-        analysis_available=suggested_category is not None,
-    )
 
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)

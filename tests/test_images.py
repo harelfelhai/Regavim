@@ -1,19 +1,12 @@
 """
-Stage 4 + Stage 5 integration and unit tests — image upload and AI analysis pipeline.
+Integration and unit tests — image upload pipeline.
 
-Test matrix (Stage 4):
+Test matrix:
   Happy path       — JPEG with full GPS + timestamp EXIF → has_exif True
   No-EXIF cases    — plain JPEG, PNG, JPEG with make/model only → has_exif False
   Anomalies        — corrupt bytes, oversized file, path traversal filename
   Concurrency      — 5 simultaneous uploads to same report, all unique IDs
   Service units    — exif_has_legal_metadata() logic in isolation
-
-Test matrix (Stage 5 — TestAnalyzeEndpoint):
-  Happy path       — valid category returned, report.ai_category set
-  Timeout/error    — None returned, endpoint still 200, analysis_available=False
-  Suggested/confirmed separation — ai_category set, final_category stays None
-  TIFF skipped     — unsupported format, analysis_available=False
-  Invalid image_id — 404
 
 Image fixtures use piexif to inject controlled EXIF data so tests are
 deterministic and don't rely on external image files.
@@ -22,7 +15,6 @@ deterministic and don't rely on external image files.
 import io
 import threading
 from pathlib import Path
-from unittest.mock import patch
 
 import piexif
 import pytest
@@ -370,69 +362,6 @@ class TestExtractExifEnriched:
         assert extract_exif(b"not an image") is None
 
 
-# ── Stage 5: /analyze endpoint ────────────────────────────────────────────────
-
-class TestAnalyzeEndpoint:
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_happy_path_returns_200(self, mock_analyze, upload_client, report_id):
-        mock_analyze.return_value = "ILLEGAL_CONSTRUCTION"
-        image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
-        response = upload_client.post("/api/v1/images/analyze", data={"image_id": image_id})
-        assert response.status_code == 200
-
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_happy_path_returns_valid_category(self, mock_analyze, upload_client, report_id):
-        mock_analyze.return_value = "ILLEGAL_CONSTRUCTION"
-        image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
-        data = upload_client.post("/api/v1/images/analyze", data={"image_id": image_id}).json()
-        assert data["ai_category"] == "ILLEGAL_CONSTRUCTION"
-        assert data["analysis_available"] is True
-
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_timeout_returns_200_with_no_category(self, mock_analyze, upload_client, report_id):
-        mock_analyze.return_value = None
-        image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
-        data = upload_client.post("/api/v1/images/analyze", data={"image_id": image_id}).json()
-        assert data["ai_category"] is None
-        assert data["analysis_available"] is False
-
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_ai_category_persisted_on_report(self, mock_analyze, upload_client, report_id):
-        mock_analyze.return_value = "ROAD_PAVING"
-        image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
-        upload_client.post("/api/v1/images/analyze", data={"image_id": image_id})
-        report = upload_client.get(f"/api/v1/reports/{report_id}").json()
-        assert report["ai_category"] == "ROAD_PAVING"
-
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_suggested_does_not_set_final_category(self, mock_analyze, upload_client, report_id):
-        mock_analyze.return_value = "DEMOLITION"
-        image_id = _upload(upload_client, report_id, jpeg_no_exif()).json()["id"]
-        upload_client.post("/api/v1/images/analyze", data={"image_id": image_id})
-        report = upload_client.get(f"/api/v1/reports/{report_id}").json()
-        assert report["ai_category"] == "DEMOLITION"
-        assert report["final_category"] is None
-
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_tiff_analysis_available_false(self, mock_analyze, upload_client, report_id):
-        """TIFF uploads succeed but AI skips them — analysis_available must be False."""
-        mock_analyze.return_value = None
-        buf = io.BytesIO()
-        PILImage.new("RGB", (64, 64)).save(buf, format="TIFF")
-        response = upload_client.post(
-            "/api/v1/images/upload",
-            data={"report_id": report_id},
-            files={"file": ("photo.tiff", buf.getvalue(), "image/tiff")},
-        )
-        image_id = response.json()["id"]
-        data = upload_client.post("/api/v1/images/analyze", data={"image_id": image_id}).json()
-        assert data["analysis_available"] is False
-
-    def test_nonexistent_image_returns_404(self, upload_client):
-        response = upload_client.post("/api/v1/images/analyze", data={"image_id": "nonexistent"})
-        assert response.status_code == 404
-
-
 # ── File-serving endpoint ─────────────────────────────────────────────────────
 
 class TestFileEndpoint:
@@ -474,17 +403,6 @@ class TestStagedImages:
         ).json()
         assert image_id in report["image_ids"]
         assert report["status"] == "confirmed"
-
-    @patch("backend.api.v1.images.analyze_image_with_claude")
-    def test_ai_category_copied_to_report_on_create(self, mock_analyze, upload_client):
-        mock_analyze.return_value = "ROAD_PAVING"
-        image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]
-        upload_client.post("/api/v1/images/analyze", data={"image_id": image_id})
-        report = upload_client.post(
-            "/api/v1/reports/",
-            json={"description": "x", "final_category": "ROAD_PAVING", "image_id": image_id},
-        ).json()
-        assert report["ai_category"] == "ROAD_PAVING"
 
     def test_create_report_with_already_linked_image_returns_409(self, upload_client):
         image_id = _upload_staged(upload_client, jpeg_no_exif()).json()["id"]

@@ -4,7 +4,6 @@ import {
   AlertCircle,
   Loader2,
   MapPin,
-  Sparkles,
   CheckCircle2,
   Trash2,
   Clock,
@@ -118,7 +117,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const badgeClass = STATUS_BADGE[report.status] ?? STATUS_BADGE.pending;
   const canConfirm = EDITABLE_STATUSES.has(report.status);
   const firstImageId = report.image_ids?.[0];
-  const displayCategory = confirmValue || report.final_category || report.ai_category || '';
+  const displayCategory = confirmValue || report.final_category || '';
   const displayTags = localTags ?? (report.tags || []);
 
   const canRequestDeletion =
@@ -191,19 +190,6 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             <p className="text-sm text-gray-700">{report.description}</p>
           </div>
         )}
-
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
-          <div className="flex items-center gap-1.5 text-regavim-blue mb-1">
-            <Sparkles size={13} />
-            <span className="text-xs font-semibold uppercase tracking-wide">ניתוח AI</span>
-          </div>
-          <p className="text-xs text-gray-600">
-            הצעת AI:{' '}
-            <span className="font-medium text-gray-800">
-              {formatCategory(report.ai_category)}
-            </span>
-          </p>
-        </div>
 
         {report.final_category && (
           <div>

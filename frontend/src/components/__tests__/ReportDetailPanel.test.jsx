@@ -22,7 +22,6 @@ const defaultHook = {
 const MOCK_REPORT = {
   id: 'r-1',
   status: 'pending',
-  ai_category: 'ROAD_PAVING',
   final_category: null,
   description: 'סלילת דרך לא חוקית ליד השטח הירוק.',
   created_at: '2025-03-15T10:00:00Z',
@@ -80,11 +79,9 @@ describe('ReportDetailPanel — report data', () => {
     expect(screen.getByText('סלילת דרך לא חוקית ליד השטח הירוק.')).toBeInTheDocument();
   });
 
-  it('shows AI suggested category in the metadata section', () => {
-    renderPanel({ report: MOCK_REPORT });
-    const spans = screen.getAllByText('סלילת דרך');
-    const metaSpan = spans.find((el) => el.tagName === 'SPAN');
-    expect(metaSpan).toBeInTheDocument();
+  it('shows "קטגוריה מאושרת" label when final_category is set', () => {
+    renderPanel({ report: { ...MOCK_REPORT, final_category: 'ROAD_PAVING', status: 'confirmed' } });
+    expect(screen.getByText('קטגוריה מאושרת')).toBeInTheDocument();
   });
 
   it('shows coordinates', () => {

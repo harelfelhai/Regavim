@@ -27,9 +27,6 @@ class Settings(BaseSettings):
     # For production, swap LocalStorageProvider for S3StorageProvider instead.
     UPLOAD_DIR: str = "uploads"
 
-    # Anthropic Claude API key for image analysis.
-    ANTHROPIC_API_KEY: str = ""
-
     # JWT — generate a strong secret with:
     #   python -c "import secrets; print(secrets.token_hex(32))"
     SECRET_KEY: str = "change-me-before-production"
