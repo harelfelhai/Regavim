@@ -1,0 +1,20 @@
+{
+  "name": "רגבים מוניטור",
+  "short_name": "Regavim",
+  "description": "מערכת ניטור ודיווח על הפרות קרקע",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#2563eb",
+  "background_color": "#f8fafc",
+  "lang": "he",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

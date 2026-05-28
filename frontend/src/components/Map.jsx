@@ -1,13 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   MapContainer,
   TileLayer,
-  Marker,
   LayersControl,
   useMap,
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet.markercluster';
 
 const { BaseLayer } = LayersControl;
 
@@ -24,11 +26,11 @@ const ESRI_ATTR =
   'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
 
 const STATUS_COLOR = {
-  pending:            '#f59e0b', // amber-400  — needs action
-  confirmed:          '#2563eb', // regavim-blue — coordinator reviewed
-  approved:           '#22c55e', // green-500  — manager approved
-  rejected:           '#9ca3af', // gray-400   — dismissed
-  deletion_requested: '#dc2626', // red-600    — pending deletion review
+  pending:            '#f59e0b',
+  confirmed:          '#2563eb',
+  approved:           '#22c55e',
+  rejected:           '#9ca3af',
+  deletion_requested: '#dc2626',
 };
 
 function createMarkerIcon(status, isSelected = false) {
@@ -50,7 +52,90 @@ function createMarkerIcon(status, isSelected = false) {
   });
 }
 
-/** Watches panTarget in the Zustand store and calls map.panTo() when it changes. */
+function isMappable(report) {
+  return (
+    report.target_lat != null &&
+    report.target_lng != null &&
+    Math.abs(report.target_lat) <= 90 &&
+    Math.abs(report.target_lng) <= 180
+  );
+}
+
+/**
+ * Renders all reports as clustered markers using leaflet.markercluster.
+ * Handles 10 000+ reports without DOM overhead — markers in clusters are not
+ * added to the DOM until the user zooms in.
+ *
+ * onSelectReport is held in a ref so changing its reference never triggers a
+ * full marker rebuild.
+ */
+function ClusteredMarkers({ reports, selectedReportId, onSelectReport }) {
+  const map = useMap();
+  const groupRef  = useRef(null);
+  // Plain object used as a cache (id → L.Marker) to avoid naming conflicts
+  // with the exported `Map` component function in this module.
+  const cacheRef  = useRef({});
+  const selectRef = useRef(onSelectReport);
+
+  useEffect(() => { selectRef.current = onSelectReport; });
+
+  // Create the cluster layer once and tear it down on unmount.
+  useEffect(() => {
+    const group = L.markerClusterGroup({
+      maxClusterRadius: 60,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      zoomToBoundsOnClick: true,
+      chunkedLoading: true,
+    });
+    groupRef.current = group;
+    map.addLayer(group);
+    return () => {
+      map.removeLayer(group);
+      groupRef.current = null;
+      cacheRef.current = {};
+    };
+  }, [map]);
+
+  // Sync markers whenever the report list or selection changes.
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    const mappable = reports.filter(isMappable);
+    const newIds   = new Set(mappable.map((r) => r.id));
+    const cache    = cacheRef.current;
+
+    // Remove markers for deleted/filtered-out reports.
+    for (const id of Object.keys(cache)) {
+      if (!newIds.has(id)) {
+        group.removeLayer(cache[id]);
+        delete cache[id];
+      }
+    }
+
+    // Add new markers or update icons for existing ones.
+    const toAdd = [];
+    for (const report of mappable) {
+      const isSelected = report.id === selectedReportId;
+      if (report.id in cache) {
+        cache[report.id].setIcon(createMarkerIcon(report.status, isSelected));
+      } else {
+        const marker = L.marker(
+          [report.target_lat, report.target_lng],
+          { icon: createMarkerIcon(report.status, isSelected) },
+        );
+        marker.on('click', () => selectRef.current?.(report));
+        cache[report.id] = marker;
+        toAdd.push(marker);
+      }
+    }
+    if (toAdd.length) group.addLayers(toAdd);
+  }, [reports, selectedReportId]);
+
+  return null;
+}
+
 function MapController({ panTarget }) {
   const map = useMap();
   useEffect(() => {
@@ -62,30 +147,30 @@ function MapController({ panTarget }) {
 }
 
 /**
- * Right-click / long-press handler that lets the user start a new report at a
- * chosen map location. The double-click default zoom is overridden too so
- * a quick double-tap on mobile can also trigger the new-report flow.
+ * Fires onCreateAt on right-click (desktop) and on long-press (mobile).
+ * Leaflet surfaces long-press as a contextmenu event on touch devices, so a
+ * single handler covers both. A 500 ms touch timer acts as a belt-and-suspenders
+ * fallback for browsers where Leaflet's contextmenu synthesis isn't triggered.
  */
 function NewReportHandler({ onCreateAt }) {
+  const timerRef = useRef(null);
+
   useMapEvents({
     contextmenu(e) {
+      clearTimeout(timerRef.current);
       onCreateAt?.({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
+    touchstart(e) {
+      if (e.originalEvent.touches.length !== 1) return;
+      const { lat, lng } = e.latlng;
+      timerRef.current = setTimeout(() => {
+        onCreateAt?.({ lat, lng });
+      }, 600);
+    },
+    touchend()  { clearTimeout(timerRef.current); },
+    touchmove() { clearTimeout(timerRef.current); },
   });
   return null;
-}
-
-/**
- * Determines whether a report has valid, plottable coordinates.
- * Reports without target coordinates appear in the sidebar but not on the map.
- */
-function isMappable(report) {
-  return (
-    report.target_lat != null &&
-    report.target_lng != null &&
-    Math.abs(report.target_lat) <= 90 &&
-    Math.abs(report.target_lng) <= 180
-  );
 }
 
 export default function Map({
@@ -95,8 +180,6 @@ export default function Map({
   onSelectReport = null,
   onCreateAt = null,
 }) {
-  const mappable = reports.filter(isMappable);
-
   return (
     <MapContainer
       center={ISRAEL_CENTER}
@@ -113,17 +196,11 @@ export default function Map({
         </BaseLayer>
       </LayersControl>
 
-      {mappable.map((report) => (
-        <Marker
-          key={report.id}
-          position={[report.target_lat, report.target_lng]}
-          icon={createMarkerIcon(report.status, report.id === selectedReportId)}
-          data-testid="report-marker"
-          eventHandlers={{
-            click: () => onSelectReport?.(report),
-          }}
-        />
-      ))}
+      <ClusteredMarkers
+        reports={reports}
+        selectedReportId={selectedReportId}
+        onSelectReport={onSelectReport}
+      />
 
       <MapController panTarget={panTarget} />
       {onCreateAt && <NewReportHandler onCreateAt={onCreateAt} />}

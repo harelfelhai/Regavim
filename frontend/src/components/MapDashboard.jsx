@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, LogOut, Plus } from 'lucide-react';
+import { Layers, LogOut, Plus, List, X } from 'lucide-react';
 import { useReports } from '../hooks/useReports';
 import useAuthStore from '../store/authStore';
 import useMapStore from '../store/mapStore';
@@ -14,23 +14,23 @@ const EMPTY_FILTERS = { status: '', dateFrom: '', dateTo: '', tag: '' };
 
 export default function MapDashboard() {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
+  const user   = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
-  const [showForm, setShowForm] = useState(false);
-  // When non-null, the form opens with the location pre-filled (e.g. via a
-  // right-click / long-press on the main map).
+  const [showForm,      setShowForm]      = useState(false);
   const [initialTarget, setInitialTarget] = useState(null);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filters,       setFilters]       = useState(EMPTY_FILTERS);
+  // Mobile: sidebar is hidden by default; visible on toggle.
+  const [showSidebar,   setShowSidebar]   = useState(false);
 
   const { panTarget, panTo, selectedReportId, selectReport, clearSelection } = useMapStore();
 
   const activeFilters = useMemo(() => {
     const f = {};
-    if (filters.status) f.status = filters.status;
+    if (filters.status)   f.status    = filters.status;
     if (filters.dateFrom) f.date_from = `${filters.dateFrom}T00:00:00`;
-    if (filters.dateTo) f.date_to = `${filters.dateTo}T23:59:59`;
-    if (filters.tag) f.tag = filters.tag;
+    if (filters.dateTo)   f.date_to   = `${filters.dateTo}T23:59:59`;
+    if (filters.tag)      f.tag       = filters.tag;
     return f;
   }, [filters]);
 
@@ -57,11 +57,13 @@ export default function MapDashboard() {
   function handleCreateAtMap(coords) {
     setInitialTarget(coords);
     setShowForm(true);
+    setShowSidebar(false);
   }
 
   function handleNewReport() {
     setInitialTarget(null);
     setShowForm(true);
+    setShowSidebar(false);
   }
 
   function handleLogout() {
@@ -71,8 +73,36 @@ export default function MapDashboard() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-regavim-bg">
-      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="w-72 flex-shrink-0 bg-regavim-surface flex flex-col border-e border-regavim-border shadow-sm">
+
+      {/* ── Mobile sidebar backdrop ──────────────────────────────────────── */}
+      {showSidebar && (
+        <div
+          className="sm:hidden fixed inset-0 bg-black/30 z-[998]"
+          onClick={() => setShowSidebar(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+      {/*
+        Desktop (sm+): static flex column on the right (RTL start).
+        Mobile:        fixed overlay that slides in from the right edge.
+        The translate-x-full / translate-x-0 trick moves the panel off-screen
+        when hidden; sm:translate-x-0 always keeps it visible on desktop.
+      */}
+      <aside
+        className={[
+          'fixed sm:relative inset-y-0 end-0',
+          'z-[999] sm:z-auto',
+          'w-72 flex-shrink-0',
+          'bg-regavim-surface flex flex-col',
+          'border-s sm:border-e border-regavim-border',
+          'shadow-xl sm:shadow-sm',
+          'transition-transform duration-300 ease-in-out',
+          showSidebar ? 'translate-x-0' : 'translate-x-full',
+          'sm:translate-x-0',
+        ].join(' ')}
+      >
         <header className="px-4 py-3 border-b border-regavim-border flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -81,23 +111,30 @@ export default function MapDashboard() {
                 Regavim Monitor
               </h1>
             </div>
-            <button
-              onClick={handleNewReport}
-              aria-label="דיווח חדש"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-regavim-blue text-white text-xs font-medium hover:bg-regavim-blue/90 transition-colors"
-            >
-              <Plus size={13} />
-              חדש
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleNewReport}
+                aria-label="דיווח חדש"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-regavim-blue text-white text-xs font-medium hover:bg-regavim-blue/90 transition-colors"
+              >
+                <Plus size={13} />
+                חדש
+              </button>
+              {/* Close button — visible only on mobile */}
+              <button
+                onClick={() => setShowSidebar(false)}
+                aria-label="סגור רשימה"
+                className="sm:hidden p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
           <p className="text-xs text-gray-400 mt-0.5 ms-6">
-            {loading
-              ? 'טוען...'
-              : `${reports.length} דיווחים`}
+            {loading ? 'טוען...' : `${reports.length} דיווחים`}
           </p>
         </header>
 
-        {/* Sidebar body: detail view or filter + list */}
         <div className="flex-1 overflow-y-auto min-h-0">
           {selectedReportId ? (
             <ReportDetailPanel
@@ -120,7 +157,6 @@ export default function MapDashboard() {
           )}
         </div>
 
-        {/* ── Footer: user info + logout ───────────────────────────────── */}
         <footer className="px-4 py-3 border-t border-regavim-border flex-shrink-0 flex items-center justify-between gap-2">
           <span className="text-xs text-gray-400 truncate" title={user?.email}>
             {user?.email ?? ''}
@@ -137,7 +173,7 @@ export default function MapDashboard() {
         </footer>
       </aside>
 
-      {/* ── Map ─────────────────────────────────────────────────────────── */}
+      {/* ── Map ──────────────────────────────────────────────────────────── */}
       <main className="flex-1 h-full relative">
         <Map
           reports={reports}
@@ -147,21 +183,44 @@ export default function MapDashboard() {
           onCreateAt={handleCreateAtMap}
         />
 
-        {/* Floating hint for the right-click / long-press shortcut */}
+        {/* Mobile FABs — hidden on desktop ─────────────────────────────── */}
         {!showForm && (
-          <div className="absolute bottom-3 start-3 z-[500] bg-white/90 backdrop-blur rounded-lg shadow border border-gray-200 px-3 py-1.5 text-xs text-gray-600 pointer-events-none">
+          <>
+            {/* New-report FAB */}
+            <button
+              onClick={handleNewReport}
+              aria-label="דיווח חדש"
+              className="sm:hidden absolute bottom-20 start-4 z-[500] bg-regavim-blue text-white p-4 rounded-full shadow-xl active:scale-95 transition-transform"
+            >
+              <Plus size={22} />
+            </button>
+
+            {/* Sidebar toggle FAB */}
+            <button
+              onClick={() => setShowSidebar((v) => !v)}
+              aria-label={showSidebar ? 'סגור רשימה' : 'הצג רשימה'}
+              className="sm:hidden absolute bottom-4 start-4 z-[500] bg-white border border-gray-200 text-gray-700 p-3.5 rounded-full shadow-lg active:scale-95 transition-transform"
+            >
+              <List size={20} />
+            </button>
+          </>
+        )}
+
+        {/* Desktop hint for right-click/long-press shortcut */}
+        {!showForm && (
+          <div className="hidden sm:block absolute bottom-3 start-3 z-[500] bg-white/90 backdrop-blur rounded-lg shadow border border-gray-200 px-3 py-1.5 text-xs text-gray-600 pointer-events-none">
             לחיצה ארוכה / ימנית במפה — דיווח חדש במיקום
           </div>
         )}
 
-        {/* ── Report Form Modal ──────────────────────────────────────────── */}
+        {/* ── Report Form Modal ─────────────────────────────────────────── */}
         {showForm && (
           <div
             className="absolute inset-0 bg-black/40 flex items-center justify-center z-[1000]"
             onClick={(e) => { if (e.target === e.currentTarget) handleCloseForm(); }}
             data-testid="report-form-backdrop"
           >
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-h-[95svh] overflow-y-auto">
               <ReportForm
                 onClose={handleCloseForm}
                 onSubmitted={handleSubmitted}

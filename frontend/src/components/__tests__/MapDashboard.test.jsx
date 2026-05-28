@@ -86,6 +86,8 @@ describe('MapDashboard — layout', () => {
 
   it('renders the New report button', () => {
     renderDashboard();
-    expect(screen.getByRole('button', { name: 'דיווח חדש' })).toBeInTheDocument();
+    // Sidebar header button + mobile FAB — both carry the same aria-label.
+    const btns = screen.getAllByRole('button', { name: 'דיווח חדש' });
+    expect(btns.length).toBeGreaterThanOrEqual(1);
   });
 });
