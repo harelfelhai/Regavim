@@ -1,0 +1,52 @@
+# Render Blueprint — defines the backend web service.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# First-time setup:
+#   1. Push this file to main.
+#   2. In the Render dashboard → "New Blueprint Instance" → select this repo.
+#   3. Set the two sync:false env vars (DATABASE_URL, ANTHROPIC_API_KEY) in the
+#      Render dashboard under the service's Environment tab.
+#   4. After the Vercel frontend is live, update ALLOWED_ORIGINS to its URL.
+
+services:
+  - type: web
+    name: regavim-api
+    runtime: python
+    region: oregon
+    branch: main
+    buildCommand: pip install -r backend/requirements.txt
+    # Migrations run before uvicorn starts so the schema is always up to date.
+    startCommand: alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      # ── Secrets (set manually in Render dashboard — never committed) ──────────
+      - key: DATABASE_URL
+        sync: false          # PostgreSQL URL from Neon/Render Postgres/Supabase
+
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+
+      - key: CLOUDINARY_API_KEY
+        sync: false
+
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # ── Auto-generated on first deploy ────────────────────────────────────────
+      - key: SECRET_KEY
+        generateValue: true  # Render generates a random 32-byte hex string
+
+      # ── Static config (safe to commit) ────────────────────────────────────────
+      - key: ALLOWED_ORIGINS
+        # Replace with your Vercel frontend URL after the first deploy.
+        # Multiple origins: "https://regavim.vercel.app,https://www.regavim.org"
+        value: https://regavim.vercel.app
+
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"        # 24 hours
+
+      # Render's disk is ephemeral. Use /tmp for now; migrate to S3 for persistence.
+      - key: UPLOAD_DIR
+        value: /tmp/uploads

@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Mobile / touch hardening ──────────────────────────────────────────────
+   These rules target real phone behaviour that Tailwind utilities don't cover. */
+
+@layer base {
+  html {
+    /* Don't let iOS bump up text sizes in landscape, and kill the grey
+       tap-flash that Android draws over every tapped element. */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    /* Stop the whole page from rubber-band scrolling behind fixed panels. */
+    overscroll-behavior-y: none;
+  }
+}
+
+/* iOS Safari zooms the viewport whenever a focused form control has a
+   font-size below 16px. Force >=16px on phones only (<=640px = below the
+   `sm` breakpoint) so the compact desktop design is left untouched.
+   !important is required to beat Tailwind's text-xs / text-sm utilities. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
