@@ -25,9 +25,6 @@ services:
       - key: DATABASE_URL
         sync: false          # PostgreSQL URL from Neon/Render Postgres/Supabase
 
-      - key: ANTHROPIC_API_KEY
-        sync: false
-
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
 
