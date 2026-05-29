@@ -39,6 +39,14 @@ beforeEach(() => {
   setQueuedItemStatus.mockResolvedValue();
 });
 
+const UPLOADING_ITEM = {
+  id: 'u1',
+  status: 'uploading',
+  fields: { description: 'uploading report' },
+  createdAt: new Date().toISOString(),
+  error: null,
+};
+
 // ── Mount ─────────────────────────────────────────────────────────────────────
 
 describe('useOfflineSync — mount', () => {
@@ -62,6 +70,14 @@ describe('useOfflineSync — mount', () => {
     const { result } = renderHook(() => useOfflineSync());
     await waitFor(() => expect(drainQueue).toHaveBeenCalled());
     await waitFor(() => expect(result.current.syncing).toBe(false));
+  });
+
+  it('resets stale "uploading" items to "pending" on mount', async () => {
+    getAllQueuedItems.mockResolvedValue([UPLOADING_ITEM]);
+    renderHook(() => useOfflineSync());
+    await waitFor(() =>
+      expect(setQueuedItemStatus).toHaveBeenCalledWith(UPLOADING_ITEM.id, 'pending', null),
+    );
   });
 });
 
@@ -106,9 +122,10 @@ describe('useOfflineSync — discard', () => {
 
   it('refreshes the queue after discarding', async () => {
     getAllQueuedItems
+      .mockResolvedValueOnce([PENDING_ITEM]) // resetStaleUploading
       .mockResolvedValueOnce([PENDING_ITEM]) // initial refresh
       .mockResolvedValueOnce([PENDING_ITEM]) // refresh after drain
-      .mockResolvedValue([]);                // refresh after discard
+      .mockResolvedValue([]);                // refresh after discard + subsequent
 
     const { result } = renderHook(() => useOfflineSync());
     await waitFor(() => expect(result.current.queue).toHaveLength(1));

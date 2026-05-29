@@ -40,8 +40,23 @@ export function useOfflineSync() {
   }, [refresh]);
 
   useEffect(() => {
-    refresh();
-    drain();
+    // Items left in 'uploading' from a previous session that crashed mid-upload
+    // will never be retried because drainQueue skips them. Reset them to 'pending'
+    // on mount so they re-enter the queue normally.
+    async function resetStaleUploading() {
+      const items = await getAllQueuedItems();
+      await Promise.all(
+        items
+          .filter(i => i.status === 'uploading')
+          .map(i => setQueuedItemStatus(i.id, 'pending', null)),
+      );
+    }
+
+    resetStaleUploading().then(() => {
+      refresh();
+      drain();
+    });
+
 
     const onOnline  = () => { setIsOnline(true);  drain(); };
     const onOffline = () =>   setIsOnline(false);
