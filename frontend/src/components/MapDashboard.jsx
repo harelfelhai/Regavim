@@ -86,7 +86,7 @@ export default function MapDashboard() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-regavim-bg">
+    <div className="flex h-screen h-[100dvh] w-screen overflow-hidden bg-regavim-bg">
 
       {/* ── Mobile sidebar backdrop ──────────────────────────────────────── */}
       {showSidebar && (
@@ -180,7 +180,7 @@ export default function MapDashboard() {
           onEdit={handleEditDraft}
         />
 
-        <footer className="px-4 py-3 border-t border-regavim-border flex-shrink-0 flex items-center justify-between gap-2">
+        <footer className="px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-regavim-border flex-shrink-0 flex items-center justify-between gap-2">
           <span className="text-xs text-gray-400 truncate" title={user?.email}>
             {user?.email ?? ''}
           </span>
@@ -213,7 +213,7 @@ export default function MapDashboard() {
             <button
               onClick={handleNewReport}
               aria-label="דיווח חדש"
-              className="sm:hidden absolute bottom-20 start-4 z-[500] bg-regavim-blue text-white p-4 rounded-full shadow-xl active:scale-95 transition-transform"
+              className="sm:hidden absolute bottom-[calc(5rem+env(safe-area-inset-bottom))] start-4 z-[500] bg-regavim-blue text-white p-4 rounded-full shadow-xl active:scale-95 transition-transform"
             >
               <Plus size={22} />
             </button>
@@ -222,7 +222,7 @@ export default function MapDashboard() {
             <button
               onClick={() => setShowSidebar((v) => !v)}
               aria-label={showSidebar ? 'סגור רשימה' : 'הצג רשימה'}
-              className="sm:hidden absolute bottom-4 start-4 z-[500] bg-white border border-gray-200 text-gray-700 p-3.5 rounded-full shadow-lg active:scale-95 transition-transform"
+              className="sm:hidden absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] start-4 z-[500] bg-white border border-gray-200 text-gray-700 p-3.5 rounded-full shadow-lg active:scale-95 transition-transform"
             >
               <List size={20} />
             </button>

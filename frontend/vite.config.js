@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: false,
       workbox: {
         // Precache all built JS/CSS/HTML/fonts/icons so the app loads offline.
-        globPatterns: ['**/*.{js,css,html,ico,svg,woff,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,svg,png,woff,woff2}'],
         // SPA fallback: any unmatched navigation serves index.html from cache.
         navigateFallback: '/index.html',
         // Never intercept API requests — let them reach the network.

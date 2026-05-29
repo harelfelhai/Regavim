@@ -469,7 +469,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null,
       {step === STEP.IDLE && pendingFile && (
         <form
           onSubmit={handleMetadataSubmit}
-          className="flex flex-col gap-5 px-6 py-5 max-h-[80vh] overflow-y-auto"
+          className="flex flex-col gap-5 px-6 py-5 max-h-[80svh] overflow-y-auto"
           data-testid="metadata-form"
         >
           {/* Selected file indicator */}
