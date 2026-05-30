@@ -1,0 +1,51 @@
+name: Seed demo reports
+
+# Manually triggered: populates the live API with ~30 sample reports
+# (synthetic landscape images + realistic Israeli coordinates).
+#
+# How to run:
+#   GitHub → Actions tab → "Seed demo reports" → "Run workflow" →
+#   fill in the admin email + password → Run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Backend API base URL"
+        required: true
+        default: "https://regavim.onrender.com"
+      email:
+        description: "Admin email (must already exist)"
+        required: true
+        default: "harel.jct@gmail.com"
+      password:
+        description: "Admin password"
+        required: true
+
+jobs:
+  seed:
+    name: Submit sample reports
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime deps
+        run: pip install httpx Pillow
+
+      - name: Run seed script
+        env:
+          SEED_PASSWORD: ${{ inputs.password }}
+          SEED_EMAIL: ${{ inputs.email }}
+          SEED_API: ${{ inputs.api_url }}
+        run: |
+          # Keep the password out of the logs.
+          echo "::add-mask::$SEED_PASSWORD"
+          python backend/seed_reports.py \
+            --api "$SEED_API" \
+            --email "$SEED_EMAIL" \
+            --password "$SEED_PASSWORD"

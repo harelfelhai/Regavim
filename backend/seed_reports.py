@@ -414,6 +414,23 @@ def build_image(palette_idx: int, filename: str) -> Path:
     return dest
 
 
+def warm_up(client: httpx.Client, attempts: int = 6) -> None:
+    """Ping /health until the server responds, waking idle free-tier dynos."""
+    import time
+
+    for n in range(1, attempts + 1):
+        try:
+            r = client.get("/health", timeout=60)
+            if r.status_code == 200:
+                print("  Server is awake.")
+                return
+        except httpx.HTTPError:
+            pass
+        print(f"  Waiting for server to wake ({n}/{attempts})…")
+        time.sleep(5)
+    print("  Proceeding anyway — server may still be starting.")
+
+
 def login(client: httpx.Client, email: str, password: str) -> str:
     r = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     if r.status_code != 200:
@@ -487,7 +504,10 @@ def main() -> None:
         images.append(build_image(idx, name))
 
     print("\n── Step 2: Authenticate ─────────────────────────────────────")
-    with httpx.Client(base_url=args.api) as client:
+    # Generous timeout — free hosting tiers (e.g. Render) spin down when idle
+    # and can take ~50s to wake on the first request.
+    with httpx.Client(base_url=args.api, timeout=60) as client:
+        warm_up(client)
         token = login(client, args.email, args.password)
 
         print("\n── Step 3: Submit reports ───────────────────────────────────")
