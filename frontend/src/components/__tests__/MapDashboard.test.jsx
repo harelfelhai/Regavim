@@ -22,6 +22,12 @@ vi.mock('../../hooks/useOfflineSync', () => ({
   }),
 }));
 
+// Controllable viewport mock — defaults to desktop; flipped per-test for mobile.
+vi.mock('../../hooks/useMediaQuery', () => ({
+  useMediaQuery: vi.fn(() => false),
+}));
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+
 vi.mock('../../store/mapStore', () => ({
   default: () => ({
     panTarget: null,
@@ -56,6 +62,7 @@ function renderDashboard() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useMediaQuery.mockReturnValue(false); // default to desktop layout
 });
 
 describe('MapDashboard — logout', () => {
@@ -94,8 +101,33 @@ describe('MapDashboard — layout', () => {
 
   it('renders the New report button', () => {
     renderDashboard();
-    // Sidebar header button + mobile FAB — both carry the same aria-label.
     const btns = screen.getAllByRole('button', { name: 'דיווח חדש' });
     expect(btns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows the desktop sidebar (no bottom sheet) on wide viewports', () => {
+    useMediaQuery.mockReturnValue(false);
+    renderDashboard();
+    expect(screen.queryByTestId('mobile-bottom-sheet')).not.toBeInTheDocument();
+    expect(screen.getByText('Regavim Monitor')).toBeInTheDocument();
+  });
+});
+
+describe('MapDashboard — mobile layout', () => {
+  it('renders the bottom sheet instead of the desktop sidebar', () => {
+    useMediaQuery.mockReturnValue(true);
+    renderDashboard();
+    expect(screen.getByTestId('mobile-bottom-sheet')).toBeInTheDocument();
+    // The desktop-only logo header is not present on mobile.
+    expect(screen.queryByText('Regavim Monitor')).not.toBeInTheDocument();
+  });
+
+  it('still exposes logout and a new-report button on mobile', () => {
+    useMediaQuery.mockReturnValue(true);
+    renderDashboard();
+    expect(screen.getByRole('button', { name: 'יציאה' })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('button', { name: 'דיווח חדש' }).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 });

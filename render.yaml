@@ -40,9 +40,9 @@ services:
 
       # ── Static config (safe to commit) ────────────────────────────────────────
       - key: ALLOWED_ORIGINS
-        # Replace with your Vercel frontend URL after the first deploy.
-        # Multiple origins: "https://regavim.vercel.app,https://www.regavim.org"
-        value: https://regavim.vercel.app
+        # The live Vercel frontend URL. Add more, comma-separated, for custom
+        # domains: "https://regavim-jet.vercel.app,https://www.regavim.org"
+        value: https://regavim-jet.vercel.app
 
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "1440"        # 24 hours
