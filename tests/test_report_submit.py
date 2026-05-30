@@ -29,7 +29,7 @@ class TestSubmitBasic:
     def test_creates_report_and_returns_201(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "בדיקה"},
+            data={"description": "בדיקה", "final_category": "ILLEGAL_CONSTRUCTION"},
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         assert r.status_code == 201
@@ -37,30 +37,40 @@ class TestSubmitBasic:
     def test_response_includes_report_fields(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "שדה בדיקה"},
+            data={"description": "שדה בדיקה", "final_category": "ILLEGAL_CONSTRUCTION"},
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         data = r.json()
         assert data["description"] == "שדה בדיקה"
-        assert data["status"] == "pending"
+        assert data["status"] == "confirmed"
         assert data["id"] is not None
 
     def test_image_linked_in_image_ids(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "בדיקה"},
+            data={"description": "בדיקה", "final_category": "ILLEGAL_CONSTRUCTION"},
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         data = r.json()
         assert len(data["image_ids"]) == 1
 
-    def test_pending_when_no_category(self, client):
+    def test_rejects_when_no_category(self, client):
+        """The reporting threshold requires a category — a description alone is 422."""
         r = client.post(
             _SUBMIT,
             data={"description": "בדיקה"},
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
-        assert r.json()["status"] == "pending"
+        assert r.status_code == 422
+
+    def test_rejects_when_no_description(self, client):
+        """The reporting threshold requires a description too."""
+        r = client.post(
+            _SUBMIT,
+            data={"final_category": "ILLEGAL_CONSTRUCTION"},
+            files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
+        )
+        assert r.status_code == 422
 
     def test_confirmed_when_category_and_description_provided(self, client):
         r = client.post(
@@ -78,6 +88,7 @@ class TestSubmitCoordinates:
             _SUBMIT,
             data={
                 "description": "בדיקה",
+                "final_category": "ILLEGAL_CONSTRUCTION",
                 "user_lat": "31.5",
                 "user_lng": "34.9",
                 "target_lat": "31.6",
@@ -94,7 +105,11 @@ class TestSubmitCoordinates:
     def test_observed_at_stored(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "בדיקה", "observed_at": "2024-03-15T10:00:00.000Z"},
+            data={
+                "description": "בדיקה",
+                "final_category": "ILLEGAL_CONSTRUCTION",
+                "observed_at": "2024-03-15T10:00:00.000Z",
+            },
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         assert r.json()["observed_at"] is not None
@@ -102,7 +117,11 @@ class TestSubmitCoordinates:
     def test_invalid_observed_at_returns_422(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "בדיקה", "observed_at": "not-a-date"},
+            data={
+                "description": "בדיקה",
+                "final_category": "ILLEGAL_CONSTRUCTION",
+                "observed_at": "not-a-date",
+            },
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         assert r.status_code == 422
@@ -112,7 +131,11 @@ class TestSubmitTags:
     def test_tags_stored(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "בדיקה", "tags": json.dumps(["פרשייה א", "פרשייה ב"])},
+            data={
+                "description": "בדיקה",
+                "final_category": "ILLEGAL_CONSTRUCTION",
+                "tags": json.dumps(["פרשייה א", "פרשייה ב"]),
+            },
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         assert r.json()["tags"] == ["פרשייה א", "פרשייה ב"]
@@ -120,7 +143,7 @@ class TestSubmitTags:
     def test_empty_tags_field_produces_empty_list(self, client):
         r = client.post(
             _SUBMIT,
-            data={"description": "בדיקה"},
+            data={"description": "בדיקה", "final_category": "ILLEGAL_CONSTRUCTION"},
             files={"file": ("photo.jpg", _jpeg(), "image/jpeg")},
         )
         assert r.json()["tags"] == []

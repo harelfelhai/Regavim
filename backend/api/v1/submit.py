@@ -74,16 +74,20 @@ async def submit_report_atomic(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    status_value = (
-        ReportStatus.CONFIRMED.value if final_category else ReportStatus.PENDING.value
-    )
-    if status_value == ReportStatus.CONFIRMED.value and not (
-        description and description.strip()
-    ):
+    # A report must meet the reporting threshold: both a violation category and
+    # a description are mandatory, so no "empty" reports can be created via the
+    # API. (The frontend enforces the same rule.)
+    if not (final_category and final_category.strip()):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="נדרש תיאור כדי לאשר דיווח.",
+            detail="נדרשת קטגוריית עבירה לדיווח.",
         )
+    if not (description and description.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="נדרש תיאור לדיווח.",
+        )
+    status_value = ReportStatus.CONFIRMED.value
 
     parsed_tags = json.loads(tags) if tags else None
 
