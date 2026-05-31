@@ -14,6 +14,7 @@
 
 import { openDB } from 'idb';
 import { submitReport } from './reports';
+import useAuthStore from '../store/authStore';
 
 const DB_NAME  = 'regavim-offline';
 const STORE    = 'queue';
@@ -79,6 +80,9 @@ export async function setQueuedItemStatus(id, status, error = null) {
  * @returns {Promise<number>} number of items successfully uploaded
  */
 export async function drainQueue() {
+  // No token means the user isn't logged in — items stay pending until login.
+  if (!useAuthStore.getState().token) return 0;
+
   const all     = await getAllQueuedItems();
   const pending = all.filter(i => i.status !== 'uploading');
   let uploaded  = 0;

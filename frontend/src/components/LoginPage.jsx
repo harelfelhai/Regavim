@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { loginUser } from '../services/auth';
 import useAuthStore from '../store/authStore';
 
@@ -87,6 +87,14 @@ export default function LoginPage() {
             {loading ? 'מתחבר...' : 'כניסה'}
           </button>
         </form>
+
+        <p className="mt-5 text-center text-xs text-gray-500">
+          ללא חיבור לרשת?{' '}
+          <Link to="/capture" className="text-blue-600 hover:underline font-medium">
+            דווח ללא כניסה
+          </Link>
+          {' — '}הדיווח יישמר ויישלח בכניסה הבאה
+        </p>
       </div>
     </div>
   );

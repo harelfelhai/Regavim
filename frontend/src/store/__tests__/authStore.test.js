@@ -11,7 +11,7 @@ function getState() {
 beforeEach(() => {
   // Reset store between tests
   useAuthStore.setState({ user: null, token: null });
-  sessionStorage.clear();
+  localStorage.clear();
 });
 
 describe('authStore', () => {
@@ -33,22 +33,22 @@ describe('authStore', () => {
     expect(getState().token).toBeNull();
   });
 
-  it('token is written to sessionStorage on login', () => {
+  it('token is written to localStorage on login', () => {
     getState().login(STUB_USER, STUB_TOKEN);
-    const stored = JSON.parse(sessionStorage.getItem('regavim-auth'));
+    const stored = JSON.parse(localStorage.getItem('regavim-auth'));
     expect(stored.state.token).toBe(STUB_TOKEN);
   });
 
-  it('token is removed from sessionStorage on logout', () => {
+  it('token is removed from localStorage on logout', () => {
     getState().login(STUB_USER, STUB_TOKEN);
     getState().logout();
-    const stored = JSON.parse(sessionStorage.getItem('regavim-auth'));
+    const stored = JSON.parse(localStorage.getItem('regavim-auth'));
     expect(stored.state.token).toBeNull();
   });
 
-  it('user is NOT persisted to sessionStorage (only token is)', () => {
+  it('user is NOT persisted to localStorage (only token is)', () => {
     getState().login(STUB_USER, STUB_TOKEN);
-    const stored = JSON.parse(sessionStorage.getItem('regavim-auth'));
+    const stored = JSON.parse(localStorage.getItem('regavim-auth'));
     expect(stored.state.user).toBeUndefined();
   });
 });

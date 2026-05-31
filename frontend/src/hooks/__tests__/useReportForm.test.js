@@ -13,6 +13,11 @@ vi.mock('../../services/offlineQueue', () => ({
   enqueueReport: vi.fn(),
 }));
 
+// Simulate an authenticated user by default so tests exercise the normal submit path.
+vi.mock('../../store/authStore', () => ({
+  default: { getState: () => ({ token: 'test-token' }) },
+}));
+
 global.URL.createObjectURL = vi.fn(() => 'blob:mock-preview');
 global.URL.revokeObjectURL = vi.fn();
 
