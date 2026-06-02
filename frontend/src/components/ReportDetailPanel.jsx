@@ -126,10 +126,14 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const displayCategory = confirmValue || report.final_category || '';
   const displayTags = localTags ?? (report.tags || []);
 
+  // Admins act on reports directly (reject / hard-delete), so they don't see the
+  // "request deletion" button — that's only for the non-admin owner, whose
+  // request goes to a manager for review.
   const canRequestDeletion =
     currentUser &&
+    currentUser.role !== 'admin' &&
     !NON_DELETABLE_STATUSES.has(report.status) &&
-    (currentUser.id === report.user_id || currentUser.role === 'admin');
+    currentUser.id === report.user_id;
 
   const canReject =
     currentUser?.role === 'admin' &&
