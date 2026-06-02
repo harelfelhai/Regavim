@@ -12,6 +12,11 @@ vi.mock('../reports', () => ({
   submitReport: vi.fn(),
 }));
 
+// drainQueue skips if no token — provide one so tests exercise the real code path.
+vi.mock('../../store/authStore', () => ({
+  default: { getState: () => ({ token: 'test-token' }) },
+}));
+
 import { submitReport } from '../reports';
 
 const mockFile   = new File(['x'], 'test.jpg', { type: 'image/jpeg' });

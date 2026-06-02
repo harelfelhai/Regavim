@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import LoginPage from './components/LoginPage';
 import MapDashboard from './components/MapDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import CaptureGuestPage from './components/CaptureGuestPage';
 import { fetchMe } from './services/auth';
 import useAuthStore from './store/authStore';
 
@@ -52,6 +53,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/capture" element={<CaptureGuestPage />} />
         <Route
           path="/map"
           element={

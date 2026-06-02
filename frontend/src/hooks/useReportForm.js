@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { submitReport } from '../services/reports';
 import { enqueueReport } from '../services/offlineQueue';
+import useAuthStore from '../store/authStore';
 
 export const STEP = {
   IDLE:       'idle',
@@ -77,6 +78,20 @@ export function useReportForm() {
       targetLng,
       observedAt,
     };
+
+    // Guest users (no token) go straight to the offline queue; the item
+    // will be drained automatically after they log in.
+    if (!useAuthStore.getState().token) {
+      try {
+        await enqueueReport(fileRef.current, fields);
+        setStep(STEP.QUEUED);
+        return 'queued';
+      } catch {
+        setError('לא ניתן לשמור. בדוק/י שיש מספיק מקום פנוי.');
+        setStep(STEP.ERROR);
+        return false;
+      }
+    }
 
     try {
       const report = await submitReport(fileRef.current, fields);

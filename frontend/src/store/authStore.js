@@ -11,7 +11,7 @@ const useAuthStore = create(
     }),
     {
       name: 'regavim-auth',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ token: state.token }),
     }
   )

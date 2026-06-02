@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # JWT — generate a strong secret with:
     #   python -c "import secrets; print(secrets.token_hex(32))"
     SECRET_KEY: str = "change-me-before-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
 
     # CORS — comma-separated list of allowed origins, or "*" to allow all.
     # In production, set to the exact frontend URL, e.g.:

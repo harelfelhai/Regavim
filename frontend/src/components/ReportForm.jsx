@@ -357,7 +357,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null,
         <CloudOff size={48} className="text-amber-500" />
         <h2 className="text-lg font-semibold text-gray-900">הדיווח נשמר</h2>
         <p className="text-sm text-gray-500">
-          אין חיבור לרשת. הדיווח יישלח אוטומטית כשהמכשיר יחזור למצב מקוון.
+          הדיווח יישלח אוטומטית לאחר כניסה למערכת וחיבור לרשת.
         </p>
         <button
           onClick={onClose}
