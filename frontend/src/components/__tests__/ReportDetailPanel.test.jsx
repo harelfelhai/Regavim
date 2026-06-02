@@ -163,9 +163,13 @@ describe('ReportDetailPanel — deletion request button', () => {
     expect(screen.getByTestId('request-deletion-btn')).toBeInTheDocument();
   });
 
-  it('shows Request deletion button to admin regardless of ownership', () => {
+  it('hides Request deletion button from admin (admin uses reject instead)', () => {
     renderPanel({ report: MOCK_REPORT }, { currentUser: ADMIN_USER });
-    expect(screen.getByTestId('request-deletion-btn')).toBeInTheDocument();
+    // Admins act directly via reject / hard-delete, so they don't get the
+    // manager-routed "request deletion" button.
+    expect(screen.queryByTestId('request-deletion-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('reject-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('hard-delete-btn')).toBeInTheDocument();
   });
 
   it('hides Request deletion button from non-owner coordinator', () => {
