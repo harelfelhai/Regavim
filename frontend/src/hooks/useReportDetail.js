@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchReport, patchReport } from '../services/reports';
+import { fetchReport, patchReport, deleteReport } from '../services/reports';
 
 export function useReportDetail(reportId, { onPatched } = {}) {
   const [report, setReport] = useState(null);
@@ -72,6 +72,23 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
+  async function hardDeleteReport() {
+    if (!reportId) return false;
+    setPatching(true);
+    setPatchError(null);
+
+    try {
+      await deleteReport(reportId, { force: true });
+      onPatched?.();
+      return true;
+    } catch (err) {
+      setPatchError(err?.message ?? 'המחיקה נכשלה. נסה/י שנית.');
+      return false;
+    } finally {
+      setPatching(false);
+    }
+  }
+
   async function rejectReport() {
     if (!reportId) return false;
     setPatching(true);
@@ -108,5 +125,5 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
-  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion, rejectReport, saveTags };
+  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion, rejectReport, hardDeleteReport, saveTags };
 }

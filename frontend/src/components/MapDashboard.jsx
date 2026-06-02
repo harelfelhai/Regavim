@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, LogOut, Plus, ChevronRight, EyeOff, Eye } from 'lucide-react';
+import { Layers, LogOut, Plus, ChevronRight } from 'lucide-react';
 import { useReports } from '../hooks/useReports';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -112,7 +112,13 @@ export default function MapDashboard() {
     />
   ) : (
     <>
-      <FilterBar filters={filters} onChange={setFilters} />
+      <FilterBar
+        filters={filters}
+        onChange={setFilters}
+        showRejected={showRejected}
+        onToggleRejected={() => setShowRejected((v) => !v)}
+        isAdmin={user?.role === 'admin'}
+      />
       <ReportSidebar
         reports={reports}
         loading={loading}
@@ -175,24 +181,7 @@ export default function MapDashboard() {
                   Regavim Monitor
                 </h1>
               </div>
-              <div className="flex items-center gap-1.5">
-                {user?.role === 'admin' && (
-                  <button
-                    onClick={() => setShowRejected((v) => !v)}
-                    aria-label={showRejected ? 'הסתר נדחים' : 'הצג נדחים'}
-                    title={showRejected ? 'הסתר דיווחים נדחים' : 'הצג דיווחים נדחים'}
-                    className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                      showRejected
-                        ? 'bg-orange-50 border-orange-300 text-orange-600 hover:bg-orange-100'
-                        : 'border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600'
-                    }`}
-                  >
-                    {showRejected ? <Eye size={12} /> : <EyeOff size={12} />}
-                    נדחים
-                  </button>
-                )}
-                {newReportButton}
-              </div>
+              {newReportButton}
             </div>
             <p className="text-xs text-gray-400 mt-0.5 ms-6">
               {loading ? 'טוען...' : `${reports.length} דיווחים`}
@@ -262,17 +251,6 @@ export default function MapDashboard() {
                 <span className="text-sm font-medium text-regavim-navy">
                   {loading ? 'טוען...' : `${reports.length} דיווחים`}
                 </span>
-                {user?.role === 'admin' && (
-                  <button
-                    onClick={() => setShowRejected((v) => !v)}
-                    aria-label={showRejected ? 'הסתר נדחים' : 'הצג נדחים'}
-                    className={`flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-colors ${
-                      showRejected ? 'text-orange-500' : 'text-gray-400'
-                    }`}
-                  >
-                    {showRejected ? <Eye size={13} /> : <EyeOff size={13} />}
-                  </button>
-                )}
               </div>
             )}
             {newReportButton}

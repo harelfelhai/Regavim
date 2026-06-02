@@ -234,15 +234,26 @@ def update_report(
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_report(
     report_id: str,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Soft-delete a report (status → rejected). The row is retained for audit.
+    Soft-delete (default): status → rejected, row retained for audit.
+    Hard-delete (force=true, admin only): row permanently removed from DB.
     """
     report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="הדיווח לא נמצא.")
 
-    report.status = ReportStatus.REJECTED.value
+    if force:
+        if current_user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="מחיקה מוחלטת מותרת למנהלים בלבד.",
+            )
+        db.delete(report)
+    else:
+        report.status = ReportStatus.REJECTED.value
+
     db.commit()

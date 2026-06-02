@@ -8,6 +8,7 @@ import {
   Trash2,
   Clock,
   XCircle,
+  Skull,
 } from 'lucide-react';
 import { useReportDetail } from '../hooks/useReportDetail';
 import { getImageFileUrl } from '../services/images';
@@ -82,19 +83,21 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const [confirmValue, setConfirmValue] = useState('');
   const [deletionConfirmed, setDeletionConfirmed] = useState(false);
   const [rejectConfirmed, setRejectConfirmed] = useState(false);
+  const [hardDeleteStep, setHardDeleteStep] = useState(0); // 0→1→2 two-step confirm
   const [localTags, setLocalTags] = useState(null); // null = follow report.tags
 
   useEffect(() => {
     setConfirmValue('');
     setDeletionConfirmed(false);
     setRejectConfirmed(false);
+    setHardDeleteStep(0);
     setLocalTags(null);
   }, [reportId]);
 
   const {
     report, loading, error,
     patching, patchError,
-    confirmCategory, requestDeletion, rejectReport, saveTags,
+    confirmCategory, requestDeletion, rejectReport, hardDeleteReport, saveTags,
   } = useReportDetail(reportId, { onPatched });
 
   if (loading) {
@@ -155,6 +158,15 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
     }
     await rejectReport();
     setRejectConfirmed(false);
+  }
+
+  async function handleHardDelete() {
+    if (hardDeleteStep < 2) {
+      setHardDeleteStep((s) => s + 1);
+      return;
+    }
+    const ok = await hardDeleteReport();
+    if (!ok) setHardDeleteStep(0);
   }
 
   return (
@@ -370,6 +382,50 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             <button
               type="button"
               onClick={() => setRejectConfirmed(false)}
+              className="w-full text-xs text-gray-400 hover:text-gray-600"
+            >
+              ביטול
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Hard delete — admin only, two-step confirm */}
+      {currentUser?.role === 'admin' && (
+        <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0 space-y-2">
+          {hardDeleteStep === 1 && (
+            <p className="text-xs text-red-600">
+              פעולה זו בלתי הפיכה — הדיווח יימחק לצמיתות מהמערכת.
+            </p>
+          )}
+          {hardDeleteStep === 2 && (
+            <p className="text-xs font-semibold text-red-700" data-testid="hard-delete-confirm-prompt">
+              האם אתה בטוח לחלוטין? לחץ שוב למחיקה סופית.
+            </p>
+          )}
+          {patchError && hardDeleteStep > 0 && (
+            <p role="alert" className="text-xs text-red-600">{patchError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleHardDelete}
+            disabled={patching}
+            data-testid="hard-delete-btn"
+            className={`w-full flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              hardDeleteStep > 0
+                ? 'border-red-500 bg-red-50 text-red-700 hover:bg-red-100'
+                : 'border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-400'
+            }`}
+          >
+            <Skull size={14} />
+            {hardDeleteStep === 0 && 'מחק לצמיתות'}
+            {hardDeleteStep === 1 && 'אישור ראשון — המשך?'}
+            {hardDeleteStep === 2 && 'אישור סופי — מחק!'}
+          </button>
+          {hardDeleteStep > 0 && (
+            <button
+              type="button"
+              onClick={() => setHardDeleteStep(0)}
               className="w-full text-xs text-gray-400 hover:text-gray-600"
             >
               ביטול

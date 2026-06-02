@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Filter, X } from 'lucide-react';
+import { Filter, X, Eye, EyeOff } from 'lucide-react';
 import { fetchTags } from '../services/reports';
 
 const STATUSES = ['pending', 'confirmed', 'approved', 'rejected', 'deletion_requested'];
@@ -12,7 +12,7 @@ const STATUS_LABELS = {
   deletion_requested: 'ממתין למחיקה',
 };
 
-export default function FilterBar({ filters, onChange }) {
+export default function FilterBar({ filters, onChange, showRejected, onToggleRejected, isAdmin }) {
   const [tagInput, setTagInput] = useState(filters.tag || '');
   const [tagSuggestions, setTagSuggestions] = useState([]);
   const [showTagSug, setShowTagSug] = useState(false);
@@ -85,6 +85,20 @@ export default function FilterBar({ filters, onChange }) {
       </div>
 
       <div className="space-y-2">
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={onToggleRejected}
+            className={`w-full flex items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-medium transition-colors ${
+              showRejected
+                ? 'border-orange-300 bg-orange-50 text-orange-600 hover:bg-orange-100'
+                : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            {showRejected ? <Eye size={12} /> : <EyeOff size={12} />}
+            {showRejected ? 'הסתר דיווחים נדחים' : 'הצג דיווחים נדחים'}
+          </button>
+        )}
         <select
           aria-label="סינון לפי סטטוס"
           value={filters.status}
