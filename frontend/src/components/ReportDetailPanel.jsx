@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Trash2,
   Clock,
+  XCircle,
 } from 'lucide-react';
 import { useReportDetail } from '../hooks/useReportDetail';
 import { getImageFileUrl } from '../services/images';
@@ -80,18 +81,20 @@ function formatStatus(s) {
 export default function ReportDetailPanel({ reportId, onBack, onPatched, currentUser }) {
   const [confirmValue, setConfirmValue] = useState('');
   const [deletionConfirmed, setDeletionConfirmed] = useState(false);
+  const [rejectConfirmed, setRejectConfirmed] = useState(false);
   const [localTags, setLocalTags] = useState(null); // null = follow report.tags
 
   useEffect(() => {
     setConfirmValue('');
     setDeletionConfirmed(false);
+    setRejectConfirmed(false);
     setLocalTags(null);
   }, [reportId]);
 
   const {
     report, loading, error,
     patching, patchError,
-    confirmCategory, requestDeletion, saveTags,
+    confirmCategory, requestDeletion, rejectReport, saveTags,
   } = useReportDetail(reportId, { onPatched });
 
   if (loading) {
@@ -125,6 +128,10 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
     !NON_DELETABLE_STATUSES.has(report.status) &&
     (currentUser.id === report.user_id || currentUser.role === 'admin');
 
+  const canReject =
+    currentUser?.role === 'admin' &&
+    report.status !== 'rejected';
+
   async function handleConfirm(e) {
     e.preventDefault();
     if (!displayCategory) return;
@@ -139,6 +146,15 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
     }
     await requestDeletion();
     setDeletionConfirmed(false);
+  }
+
+  async function handleReject() {
+    if (!rejectConfirmed) {
+      setRejectConfirmed(true);
+      return;
+    }
+    await rejectReport();
+    setRejectConfirmed(false);
   }
 
   return (
@@ -296,7 +312,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
               האם אתה בטוח? הדיווח יסומן לבדיקת מנהל.
             </p>
           )}
-          {patchError && !canConfirm && (
+          {patchError && !canConfirm && !canReject && (
             <p role="alert" className="text-xs text-red-600">{patchError}</p>
           )}
           <button
@@ -317,6 +333,43 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             <button
               type="button"
               onClick={() => setDeletionConfirmed(false)}
+              className="w-full text-xs text-gray-400 hover:text-gray-600"
+            >
+              ביטול
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Reject — admin only */}
+      {canReject && (
+        <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0 space-y-2">
+          {rejectConfirmed && (
+            <p className="text-xs text-orange-600" data-testid="reject-confirm-prompt">
+              הדיווח יסומן כנדחה ויוסר מהמפה. האם להמשיך?
+            </p>
+          )}
+          {patchError && canReject && !canConfirm && (
+            <p role="alert" className="text-xs text-red-600">{patchError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleReject}
+            disabled={patching}
+            data-testid="reject-btn"
+            className={`w-full flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              rejectConfirmed
+                ? 'border-orange-400 bg-orange-50 text-orange-600 hover:bg-orange-100'
+                : 'border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-500'
+            }`}
+          >
+            <XCircle size={14} />
+            {rejectConfirmed ? 'אישור דחיית הדיווח' : 'דחה דיווח'}
+          </button>
+          {rejectConfirmed && (
+            <button
+              type="button"
+              onClick={() => setRejectConfirmed(false)}
               className="w-full text-xs text-gray-400 hover:text-gray-600"
             >
               ביטול

@@ -72,6 +72,24 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
+  async function rejectReport() {
+    if (!reportId) return false;
+    setPatching(true);
+    setPatchError(null);
+
+    try {
+      const updated = await patchReport(reportId, { status: 'rejected' });
+      setReport(updated);
+      onPatched?.();
+      return true;
+    } catch (err) {
+      setPatchError(err?.message ?? 'הדחייה נכשלה. נסה/י שנית.');
+      return false;
+    } finally {
+      setPatching(false);
+    }
+  }
+
   async function saveTags(tags) {
     if (!reportId) return false;
     setPatching(true);
@@ -90,5 +108,5 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
-  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion, saveTags };
+  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion, rejectReport, saveTags };
 }
