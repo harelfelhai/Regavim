@@ -1,5 +1,11 @@
-import { useState, useEffect } from 'react';
-import { fetchReport, patchReport, deleteReport } from '../services/reports';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  fetchReport,
+  patchReport,
+  deleteReport,
+  fetchComplaints,
+  submitComplaint as submitComplaintApi,
+} from '../services/reports';
 
 export function useReportDetail(reportId, { onPatched } = {}) {
   const [report, setReport] = useState(null);
@@ -7,15 +13,25 @@ export function useReportDetail(reportId, { onPatched } = {}) {
   const [error, setError] = useState(null);
   const [patching, setPatching] = useState(false);
   const [patchError, setPatchError] = useState(null);
+  const [complaints, setComplaints] = useState([]);
+
+  const refreshComplaints = useCallback(() => {
+    if (!reportId) return;
+    fetchComplaints(reportId)
+      .then(setComplaints)
+      .catch(() => setComplaints([]));
+  }, [reportId]);
 
   useEffect(() => {
     if (!reportId) {
       setReport(null);
+      setComplaints([]);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setComplaints([]);
 
     fetchReport(reportId)
       .then((data) => {
@@ -30,6 +46,10 @@ export function useReportDetail(reportId, { onPatched } = {}) {
           setLoading(false);
         }
       });
+
+    fetchComplaints(reportId)
+      .then((data) => { if (!cancelled) setComplaints(data); })
+      .catch(() => { if (!cancelled) setComplaints([]); });
 
     return () => {
       cancelled = true;
@@ -125,5 +145,26 @@ export function useReportDetail(reportId, { onPatched } = {}) {
     }
   }
 
-  return { report, loading, error, patching, patchError, confirmCategory, requestDeletion, rejectReport, hardDeleteReport, saveTags };
+  async function submitComplaint(authorityKeys) {
+    if (!reportId || !authorityKeys?.length) return false;
+    setPatching(true);
+    setPatchError(null);
+
+    try {
+      const { results } = await submitComplaintApi(reportId, authorityKeys);
+      refreshComplaints();
+      return results;
+    } catch (err) {
+      setPatchError(err?.message ?? 'הגשת התלונה נכשלה. נסה/י שנית.');
+      return false;
+    } finally {
+      setPatching(false);
+    }
+  }
+
+  return {
+    report, loading, error, patching, patchError,
+    confirmCategory, requestDeletion, rejectReport, hardDeleteReport, saveTags,
+    complaints, submitComplaint,
+  };
 }

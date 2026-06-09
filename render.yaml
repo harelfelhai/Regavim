@@ -50,3 +50,34 @@ services:
       # Render's disk is ephemeral. Use /tmp for now; migrate to S3 for persistence.
       - key: UPLOAD_DIR
         value: /tmp/uploads
+
+      # ── Email for complaint submission (set secrets in the dashboard) ─────────
+      # Leave SMTP_HOST/SENDER_EMAIL unset to disable sending (the endpoint then
+      # records each attempt as 'failed'). For Gmail use an App Password as
+      # SMTP_PASSWORD; for production prefer an org mailbox / transactional
+      # provider on a domain with SPF+DKIM+DMARC so mail to .gov.il isn't junked.
+      - key: SMTP_HOST
+        sync: false          # e.g. smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false          # Gmail App Password or provider API key
+      - key: SENDER_EMAIL
+        sync: false          # must match the authenticated sending mailbox
+      - key: SMTP_USE_TLS
+        value: "true"
+
+      # Real authority intake addresses. Blank = that authority is shown disabled
+      # in the UI ("אין כתובת מוגדרת"). Set the real addresses in the dashboard.
+      - key: COMPLAINT_EMAIL_POLICE
+        sync: false
+      - key: COMPLAINT_EMAIL_ILA
+        sync: false
+      - key: COMPLAINT_EMAIL_ENV_MINISTRY
+        sync: false
+      - key: COMPLAINT_EMAIL_LOCAL_PLANNING
+        sync: false
+      - key: COMPLAINT_EMAIL_CIVIL_ADMIN
+        sync: false

@@ -6,6 +6,9 @@ import { fetchReport, patchReport } from '../../services/reports';
 vi.mock('../../services/reports', () => ({
   fetchReport: vi.fn(),
   patchReport: vi.fn(),
+  deleteReport: vi.fn(),
+  fetchComplaints: vi.fn(() => Promise.resolve([])),
+  submitComplaint: vi.fn(),
 }));
 
 const MOCK_REPORT = {

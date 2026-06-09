@@ -9,9 +9,12 @@ import {
   Clock,
   XCircle,
   Skull,
+  Send,
+  Building2,
 } from 'lucide-react';
 import { useReportDetail } from '../hooks/useReportDetail';
 import { getImageFileUrl } from '../services/images';
+import { fetchComplaintAuthorities } from '../services/reports';
 import TagInput from './TagInput';
 
 const CATEGORIES = [
@@ -56,6 +59,9 @@ const EDITABLE_STATUSES = new Set(['pending', 'confirmed']);
 // Statuses where requesting deletion is not allowed.
 const NON_DELETABLE_STATUSES = new Set(['approved', 'rejected', 'deletion_requested']);
 
+// Only validated reports can be filed as a complaint to authorities.
+const COMPLAINT_ELIGIBLE_STATUSES = new Set(['confirmed', 'approved']);
+
 function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('he-IL', {
@@ -85,6 +91,10 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const [rejectConfirmed, setRejectConfirmed] = useState(false);
   const [hardDeleteStep, setHardDeleteStep] = useState(0); // 0→1→2 two-step confirm
   const [localTags, setLocalTags] = useState(null); // null = follow report.tags
+  const [complaintSel, setComplaintSel] = useState([]); // selected authority keys
+  const [complaintConfirmed, setComplaintConfirmed] = useState(false);
+  const [complaintResult, setComplaintResult] = useState(null); // last submit outcome
+  const [authorities, setAuthorities] = useState([]);
 
   useEffect(() => {
     setConfirmValue('');
@@ -92,12 +102,21 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
     setRejectConfirmed(false);
     setHardDeleteStep(0);
     setLocalTags(null);
+    setComplaintSel([]);
+    setComplaintConfirmed(false);
+    setComplaintResult(null);
   }, [reportId]);
+
+  // The authority list is the same for every report — fetch once.
+  useEffect(() => {
+    fetchComplaintAuthorities().then(setAuthorities).catch(() => setAuthorities([]));
+  }, []);
 
   const {
     report, loading, error,
     patching, patchError,
     confirmCategory, requestDeletion, rejectReport, hardDeleteReport, saveTags,
+    complaints, submitComplaint,
   } = useReportDetail(reportId, { onPatched });
 
   if (loading) {
@@ -125,6 +144,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const firstImageId = report.image_ids?.[0];
   const displayCategory = confirmValue || report.final_category || '';
   const displayTags = localTags ?? (report.tags || []);
+  const complaintHistory = complaints ?? [];
 
   // Admins act on reports directly (reject / hard-delete), so they don't see the
   // "request deletion" button — that's only for the non-admin owner, whose
@@ -138,6 +158,11 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const canReject =
     currentUser?.role === 'admin' &&
     report.status !== 'rejected';
+
+  // Filing a complaint is an official action: managers/admins, validated reports only.
+  const canSubmitComplaint =
+    (currentUser?.role === 'admin' || currentUser?.role === 'manager') &&
+    COMPLAINT_ELIGIBLE_STATUSES.has(report.status);
 
   async function handleConfirm(e) {
     e.preventDefault();
@@ -171,6 +196,28 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
     }
     const ok = await hardDeleteReport();
     if (!ok) setHardDeleteStep(0);
+  }
+
+  function toggleAuthority(key) {
+    setComplaintResult(null);
+    setComplaintConfirmed(false);
+    setComplaintSel((sel) =>
+      sel.includes(key) ? sel.filter((k) => k !== key) : [...sel, key],
+    );
+  }
+
+  async function handleSubmitComplaint() {
+    if (!complaintSel.length) return;
+    if (!complaintConfirmed) {
+      setComplaintConfirmed(true);
+      return;
+    }
+    const results = await submitComplaint(complaintSel);
+    setComplaintConfirmed(false);
+    if (results) {
+      setComplaintResult(results);
+      setComplaintSel([]);
+    }
   }
 
   return (
@@ -353,6 +400,104 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             >
               ביטול
             </button>
+          )}
+        </div>
+      )}
+
+      {/* Submit complaint to authorities — admin/manager, validated reports */}
+      {canSubmitComplaint && (
+        <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0 space-y-2" data-testid="complaint-section">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+            <Building2 size={13} className="text-regavim-blue" />
+            הגשת תלונה לרשויות
+          </div>
+
+          <div className="space-y-1">
+            {authorities.map((a) => (
+              <label
+                key={a.key}
+                className={`flex items-center gap-2 text-sm rounded-md px-2 py-1.5 transition-colors ${
+                  a.available ? 'cursor-pointer hover:bg-gray-50 text-gray-700' : 'opacity-50 cursor-not-allowed text-gray-400'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="accent-regavim-blue"
+                  disabled={!a.available}
+                  checked={complaintSel.includes(a.key)}
+                  onChange={() => toggleAuthority(a.key)}
+                  data-testid={`complaint-authority-${a.key}`}
+                />
+                <span>{a.label}</span>
+                {!a.available && <span className="text-[10px] text-gray-400">(אין כתובת מוגדרת)</span>}
+              </label>
+            ))}
+          </div>
+
+          {complaintConfirmed && (
+            <p className="text-xs text-regavim-blue" data-testid="complaint-confirm-prompt">
+              תישלח תלונה ל-{complaintSel.length} רשויות, כולל תמונת הראיה. לאישור — לחץ/י שוב.
+            </p>
+          )}
+          {patchError && (
+            <p role="alert" className="text-xs text-red-600">{patchError}</p>
+          )}
+
+          {complaintResult && (
+            <div className="space-y-0.5" data-testid="complaint-result">
+              {complaintResult.map((r) => (
+                <p
+                  key={r.authority_key}
+                  className={`text-xs ${r.status === 'sent' ? 'text-green-600' : 'text-red-600'}`}
+                >
+                  {r.status === 'sent' ? '✓' : '✗'} {r.authority_label}
+                  {r.status === 'failed' && r.error_message ? ` — ${r.error_message}` : ''}
+                </p>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSubmitComplaint}
+            disabled={patching || complaintSel.length === 0}
+            data-testid="submit-complaint-btn"
+            className={`w-full flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              complaintConfirmed
+                ? 'border-regavim-blue bg-regavim-blue/10 text-regavim-blue hover:bg-regavim-blue/20'
+                : 'border-gray-200 text-gray-600 hover:border-regavim-blue hover:text-regavim-blue'
+            }`}
+          >
+            {patching ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {complaintConfirmed ? 'אישור שליחת התלונה' : 'הגש תלונה'}
+          </button>
+          {complaintConfirmed && (
+            <button
+              type="button"
+              onClick={() => setComplaintConfirmed(false)}
+              className="w-full text-xs text-gray-400 hover:text-gray-600"
+            >
+              ביטול
+            </button>
+          )}
+
+          {/* Submission history */}
+          {complaintHistory.length > 0 && (
+            <div className="pt-1" data-testid="complaint-history">
+              <p className="text-xs text-gray-400 mb-1">היסטוריית הגשות</p>
+              <ul className="space-y-0.5">
+                {complaintHistory.map((c) => (
+                  <li key={c.id} className="text-xs text-gray-600 flex items-center gap-1.5">
+                    <span className={c.status === 'sent' ? 'text-green-500' : 'text-red-500'}>
+                      {c.status === 'sent' ? '✓' : '✗'}
+                    </span>
+                    <span>{c.authority_label}</span>
+                    <span className="text-gray-300">·</span>
+                    <span className="text-gray-400">{formatDateTime(c.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

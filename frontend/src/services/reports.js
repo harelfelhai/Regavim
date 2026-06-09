@@ -91,3 +91,32 @@ export async function deleteReport(id, { force = false } = {}) {
     params: force ? { force: 'true' } : undefined,
   });
 }
+
+/**
+ * List the authorities a complaint can be filed to.
+ * @returns {Promise<Array<{key: string, label: string, available: boolean}>>}
+ */
+export async function fetchComplaintAuthorities() {
+  const { data } = await api.get('/api/v1/complaints/authorities');
+  return data;
+}
+
+/**
+ * Fetch the complaint submission history for a report (newest first).
+ * @param {string} reportId - Report UUID
+ */
+export async function fetchComplaints(reportId) {
+  const { data } = await api.get(`/api/v1/reports/${reportId}/complaints`);
+  return data;
+}
+
+/**
+ * Submit a report as a complaint to one or more authorities.
+ * @param {string}   reportId    - Report UUID
+ * @param {string[]} authorities - Authority keys (e.g. ['POLICE', 'ILA'])
+ * @returns {Promise<{results: Array<{authority_key, authority_label, status, error_message}>}>}
+ */
+export async function submitComplaint(reportId, authorities) {
+  const { data } = await api.post(`/api/v1/reports/${reportId}/complaints`, { authorities });
+  return data;
+}

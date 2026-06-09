@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import backend.models  # noqa: F401 — registers all ORM models with SQLAlchemy metadata
-from backend.api.v1 import auth, images, reports, submit
+from backend.api.v1 import auth, complaints, images, reports, submit
 from backend.api.v1.images import get_storage
 from backend.core.config import settings
 from backend.db.base import Base
@@ -96,6 +96,7 @@ app.include_router(submit.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(images.router, prefix="/api/v1/images", tags=["images"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(complaints.router, prefix="/api/v1", tags=["complaints"])
 
 
 @app.get("/health", tags=["health"])

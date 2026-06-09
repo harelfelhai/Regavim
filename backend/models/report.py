@@ -72,6 +72,9 @@ class Report(Base):
     images: Mapped[list["Image"]] = relationship(
         "Image", back_populates="report", cascade="all, delete-orphan"
     )
+    complaint_submissions: Mapped[list["ComplaintSubmission"]] = relationship(
+        "ComplaintSubmission", back_populates="report", cascade="all, delete-orphan"
+    )
 
     @property
     def image_ids(self) -> list[str]:
