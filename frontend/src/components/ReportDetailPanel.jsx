@@ -89,7 +89,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   const [confirmValue, setConfirmValue] = useState('');
   const [deletionConfirmed, setDeletionConfirmed] = useState(false);
   const [rejectConfirmed, setRejectConfirmed] = useState(false);
-  const [hardDeleteStep, setHardDeleteStep] = useState(0); // 0→1→2 two-step confirm
+  const [hardDeleteStep, setHardDeleteStep] = useState(0); // 0 → 1 (armed) → delete; single confirm
   const [localTags, setLocalTags] = useState(null); // null = follow report.tags
   const [complaintSel, setComplaintSel] = useState([]); // selected authority keys
   const [complaintConfirmed, setComplaintConfirmed] = useState(false);
@@ -190,12 +190,19 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
   }
 
   async function handleHardDelete() {
-    if (hardDeleteStep < 2) {
-      setHardDeleteStep((s) => s + 1);
+    // Single confirmation: first click arms (step 1), second click deletes.
+    if (hardDeleteStep < 1) {
+      setHardDeleteStep(1);
       return;
     }
     const ok = await hardDeleteReport();
-    if (!ok) setHardDeleteStep(0);
+    if (ok) {
+      // Close the panel so we never show or re-fetch the now-deleted report
+      // (re-fetching a deleted id is what surfaced a spurious 404).
+      onBack?.();
+    } else {
+      setHardDeleteStep(0);
+    }
   }
 
   function toggleAuthority(key) {
@@ -539,17 +546,12 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
         </div>
       )}
 
-      {/* Hard delete — admin only, two-step confirm */}
+      {/* Hard delete — admin only, single confirmation */}
       {currentUser?.role === 'admin' && (
         <div className="border-t border-regavim-border px-4 py-4 flex-shrink-0 space-y-2">
           {hardDeleteStep === 1 && (
-            <p className="text-xs text-red-600">
-              פעולה זו בלתי הפיכה — הדיווח יימחק לצמיתות מהמערכת.
-            </p>
-          )}
-          {hardDeleteStep === 2 && (
             <p className="text-xs font-semibold text-red-700" data-testid="hard-delete-confirm-prompt">
-              האם אתה בטוח לחלוטין? לחץ שוב למחיקה סופית.
+              פעולה זו בלתי הפיכה — הדיווח יימחק לצמיתות מהמערכת. לחץ/י שוב לאישור.
             </p>
           )}
           {patchError && hardDeleteStep > 0 && (
@@ -567,9 +569,7 @@ export default function ReportDetailPanel({ reportId, onBack, onPatched, current
             }`}
           >
             <Skull size={14} />
-            {hardDeleteStep === 0 && 'מחק לצמיתות'}
-            {hardDeleteStep === 1 && 'אישור ראשון — המשך?'}
-            {hardDeleteStep === 2 && 'אישור סופי — מחק!'}
+            {hardDeleteStep === 0 ? 'מחק לצמיתות' : 'אישור — מחק לצמיתות!'}
           </button>
           {hardDeleteStep > 0 && (
             <button

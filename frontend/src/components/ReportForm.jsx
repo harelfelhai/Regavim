@@ -95,7 +95,7 @@ const STEP_LABEL = {
  *   Re-open a queued (offline) draft for editing. When provided the form
  *   skips the camera/gallery/metadata phase and goes straight to READY.
  */
-export default function ReportForm({ onClose, onSubmitted, initialTarget = null, initialDraft = null }) {
+export default function ReportForm({ onClose, onSubmitted, initialTarget = null, initialDraft = null, guest = false }) {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const tagInputRef = useRef(null);
@@ -326,7 +326,7 @@ export default function ReportForm({ onClose, onSubmitted, initialTarget = null,
     // Flush any text still in the tag input (user typed but didn't press Enter).
     const committed = tagInputRef.current?.commitPending();
     const finalTags = committed ?? tags;
-    const ok = await handleSubmit({ description, finalCategory: displayedCategory || null, tags: finalTags });
+    const ok = await handleSubmit({ description, finalCategory: displayedCategory || null, tags: finalTags, forceQueue: guest });
     if (ok) onSubmitted?.();
   }
 

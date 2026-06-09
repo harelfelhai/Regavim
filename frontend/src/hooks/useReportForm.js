@@ -62,7 +62,7 @@ export function useReportForm() {
    * On network failure → payload is queued in IndexedDB → QUEUED.
    * On server error (4xx/5xx) → ERROR with message.
    */
-  async function handleSubmit({ description, finalCategory, tags }) {
+  async function handleSubmit({ description, finalCategory, tags, forceQueue = false }) {
     if (!fileRef.current) return false;
     setStep(STEP.SUBMITTING);
     setError(null);
@@ -79,9 +79,10 @@ export function useReportForm() {
       observedAt,
     };
 
-    // Guest users (no token) go straight to the offline queue; the item
-    // will be drained automatically after they log in.
-    if (!useAuthStore.getState().token) {
+    // Guest users (no token) — and the explicit "report without login" page
+    // (forceQueue) — go straight to the offline queue regardless of any stale
+    // persisted token; the item is drained automatically after the next login.
+    if (forceQueue || !useAuthStore.getState().token) {
       try {
         await enqueueReport(fileRef.current, fields);
         setStep(STEP.QUEUED);
