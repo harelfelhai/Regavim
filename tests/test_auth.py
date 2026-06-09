@@ -53,9 +53,30 @@ class TestRegister:
         r = _register(auth_client)
         assert r.status_code == 409
 
-    def test_custom_role_stored(self, auth_client):
-        data = _register(auth_client, role="manager").json()
-        assert data["role"] == "manager"
+    def test_public_register_cannot_self_assign_elevated_role(self, auth_client):
+        """A public caller asking for manager/admin is silently downgraded to coordinator."""
+        assert _register(auth_client, role="manager").json()["role"] == "coordinator"
+        assert _register(auth_client, email="a2@example.com", role="admin").json()["role"] == "coordinator"
+
+    def test_admin_caller_can_create_elevated_role(self, auth_client, db):
+        """An authenticated admin may create a manager/admin account."""
+        from backend.core.security import create_access_token, hash_password
+        from backend.models.user import User as UserModel
+
+        db.add(UserModel(
+            id="admin-auth-test", email="root@regavim.org",
+            role="admin", hashed_password=hash_password("x"),
+        ))
+        db.commit()
+
+        token = create_access_token("admin-auth-test", "admin")
+        r = auth_client.post(
+            f"{_BASE}/register",
+            json={"email": "mgr@example.com", "password": "Pass1234!", "role": "manager"},
+            headers=_bearer(token),
+        )
+        assert r.status_code == 201
+        assert r.json()["role"] == "manager"
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
