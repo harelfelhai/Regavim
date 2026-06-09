@@ -54,12 +54,17 @@ class Settings(BaseSettings):
     IMAGE_REAPER_SCHEDULED: bool = False
 
     # ── Email (complaint submission) ─────────────────────────────────────────
-    # SMTP credentials used to send complaint emails to authorities. Leave
-    # SMTP_HOST/SENDER_EMAIL blank to disable sending (the endpoint then records
-    # each attempt as 'failed' with a clear "SMTP not configured" message).
-    # For Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, SMTP_USER=<you>,
-    # SMTP_PASSWORD=<app password>. SendGrid/Resend can be swapped behind
-    # backend/services/email_service.py without touching callers.
+    # Preferred transport: Resend HTTPS API (works where outbound SMTP is blocked,
+    # e.g. Render). When RESEND_API_KEY is set it is used automatically; otherwise
+    # the SMTP settings below are used. RESEND_FROM must be a Resend-verified
+    # sender — the shared sandbox "onboarding@resend.dev" works for testing and
+    # can only deliver to your own Resend account email until a domain is verified.
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = "onboarding@resend.dev"
+
+    # SMTP fallback (local/dev or hosts where port 587 is open). Leave
+    # SMTP_HOST/SENDER_EMAIL blank to disable; the endpoint then records each
+    # attempt as 'failed' with a clear "not configured" message.
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

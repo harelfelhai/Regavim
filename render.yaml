@@ -52,10 +52,18 @@ services:
         value: /tmp/uploads
 
       # ── Email for complaint submission (set secrets in the dashboard) ─────────
-      # Leave SMTP_HOST/SENDER_EMAIL unset to disable sending (the endpoint then
-      # records each attempt as 'failed'). For Gmail use an App Password as
-      # SMTP_PASSWORD; for production prefer an org mailbox / transactional
-      # provider on a domain with SPF+DKIM+DMARC so mail to .gov.il isn't junked.
+      # PREFERRED: Resend HTTPS API — Render blocks outbound SMTP ports, so raw
+      # SMTP (Gmail etc.) does NOT work here. Set RESEND_API_KEY to enable.
+      # RESEND_FROM must be a Resend-verified sender; the sandbox
+      # "onboarding@resend.dev" works for testing and only delivers to your own
+      # Resend account email until you verify a domain (then use you@regavim.org.il).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        value: onboarding@resend.dev
+
+      # SMTP fallback — only used when RESEND_API_KEY is unset. Does NOT work on
+      # Render (outbound SMTP blocked); kept for local/self-hosting.
       - key: SMTP_HOST
         sync: false          # e.g. smtp.gmail.com
       - key: SMTP_PORT
