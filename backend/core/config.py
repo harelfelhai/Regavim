@@ -53,5 +53,28 @@ class Settings(BaseSettings):
     # While false, the app reaps only on startup and warns loudly on every boot.
     IMAGE_REAPER_SCHEDULED: bool = False
 
+    # ── Email (complaint submission) ─────────────────────────────────────────
+    # SMTP credentials used to send complaint emails to authorities. Leave
+    # SMTP_HOST/SENDER_EMAIL blank to disable sending (the endpoint then records
+    # each attempt as 'failed' with a clear "SMTP not configured" message).
+    # For Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, SMTP_USER=<you>,
+    # SMTP_PASSWORD=<app password>. SendGrid/Resend can be swapped behind
+    # backend/services/email_service.py without touching callers.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SENDER_EMAIL: str = ""
+    SMTP_USE_TLS: bool = True
+
+    # Recipient email per authority. Blank = that authority is shown disabled in
+    # the UI ("אין כתובת מוגדרת"). The NGO must supply real addresses before
+    # filing real complaints; use a controlled test inbox until then.
+    COMPLAINT_EMAIL_POLICE: str = ""
+    COMPLAINT_EMAIL_ILA: str = ""
+    COMPLAINT_EMAIL_ENV_MINISTRY: str = ""
+    COMPLAINT_EMAIL_LOCAL_PLANNING: str = ""
+    COMPLAINT_EMAIL_CIVIL_ADMIN: str = ""
+
 
 settings = Settings()

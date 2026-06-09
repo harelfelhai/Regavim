@@ -8,6 +8,19 @@ vi.mock('../../hooks/useReportDetail');
 vi.mock('../../services/images', () => ({
   getImageFileUrl: vi.fn((id) => `http://localhost:8000/api/v1/images/${id}/file`),
 }));
+vi.mock('../../services/reports', () => ({
+  fetchComplaintAuthorities: vi.fn(() => Promise.resolve([
+    { key: 'POLICE', label: 'משטרת ישראל', available: true },
+    { key: 'ILA', label: 'רשות מקרקעי ישראל', available: false },
+  ])),
+}));
+
+const MANAGER_USER = { id: 'user-manager', role: 'manager' };
+const CONFIRMED_REPORT = { ...{
+  id: 'r-1', status: 'confirmed', final_category: 'ROAD_PAVING',
+  description: 'desc', created_at: '2025-03-15T10:00:00Z', observed_at: null,
+  target_lat: 31.5, target_lng: 35.0, image_ids: ['img-1'], user_id: 'user-owner',
+} };
 
 const defaultHook = {
   report: null,
@@ -226,5 +239,66 @@ describe('ReportDetailPanel — navigation', () => {
     renderPanel({ report: MOCK_REPORT }, { onBack });
     fireEvent.click(screen.getByRole('button', { name: 'חזרה לרשימה' }));
     expect(onBack).toHaveBeenCalled();
+  });
+});
+
+describe('ReportDetailPanel — complaint submission', () => {
+  it('shows the complaint section for an admin on a confirmed report', async () => {
+    renderPanel({ report: CONFIRMED_REPORT, complaints: [] }, { currentUser: ADMIN_USER });
+    expect(await screen.findByTestId('complaint-section')).toBeInTheDocument();
+  });
+
+  it('shows the complaint section for a manager too', async () => {
+    renderPanel({ report: CONFIRMED_REPORT, complaints: [] }, { currentUser: MANAGER_USER });
+    expect(await screen.findByTestId('complaint-section')).toBeInTheDocument();
+  });
+
+  it('hides the complaint section from a coordinator', () => {
+    renderPanel({ report: CONFIRMED_REPORT, complaints: [] }, { currentUser: OWNER_USER });
+    expect(screen.queryByTestId('complaint-section')).not.toBeInTheDocument();
+  });
+
+  it('hides the complaint section on a pending (not-yet-validated) report', () => {
+    renderPanel(
+      { report: { ...CONFIRMED_REPORT, status: 'pending' }, complaints: [] },
+      { currentUser: ADMIN_USER },
+    );
+    expect(screen.queryByTestId('complaint-section')).not.toBeInTheDocument();
+  });
+
+  it('disables an authority that has no configured email', async () => {
+    renderPanel({ report: CONFIRMED_REPORT, complaints: [] }, { currentUser: ADMIN_USER });
+    expect(await screen.findByTestId('complaint-authority-ILA')).toBeDisabled();
+  });
+
+  it('keeps submit disabled until an authority is selected', async () => {
+    renderPanel({ report: CONFIRMED_REPORT, complaints: [] }, { currentUser: ADMIN_USER });
+    await screen.findByTestId('complaint-authority-POLICE');
+    expect(screen.getByTestId('submit-complaint-btn')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('complaint-authority-POLICE'));
+    expect(screen.getByTestId('submit-complaint-btn')).not.toBeDisabled();
+  });
+
+  it('requires a two-step confirm before calling submitComplaint', async () => {
+    const submitComplaint = vi.fn().mockResolvedValue([
+      { authority_key: 'POLICE', authority_label: 'משטרת ישראל', status: 'sent' },
+    ]);
+    renderPanel({ report: CONFIRMED_REPORT, complaints: [], submitComplaint }, { currentUser: ADMIN_USER });
+    fireEvent.click(await screen.findByTestId('complaint-authority-POLICE'));
+    fireEvent.click(screen.getByTestId('submit-complaint-btn')); // arm
+    expect(screen.getByTestId('complaint-confirm-prompt')).toBeInTheDocument();
+    expect(submitComplaint).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('submit-complaint-btn')); // confirm
+    expect(submitComplaint).toHaveBeenCalledWith(['POLICE']);
+  });
+
+  it('renders submission history', async () => {
+    const complaints = [{
+      id: 'c1', authority_key: 'POLICE', authority_label: 'משטרת ישראל',
+      recipient_email: 'p@x', status: 'sent', error_message: null,
+      created_at: '2025-03-16T09:00:00Z',
+    }];
+    renderPanel({ report: CONFIRMED_REPORT, complaints }, { currentUser: ADMIN_USER });
+    expect(await screen.findByTestId('complaint-history')).toBeInTheDocument();
   });
 });
