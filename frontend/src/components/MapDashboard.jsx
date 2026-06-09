@@ -49,7 +49,7 @@ export default function MapDashboard() {
     () => showRejected ? allReports : allReports.filter((r) => r.status !== 'rejected'),
     [allReports, showRejected],
   );
-  const { queue, syncing, isOnline, discard, retry } = useOfflineSync();
+  const { queue, syncing, isOnline, discard, retry } = useOfflineSync({ onDrained: refresh });
 
   // On mobile, expand the sheet to half-height when a report is selected so its
   // details are visible, and collapse back to a peek when the selection clears.

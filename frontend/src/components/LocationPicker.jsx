@@ -151,17 +151,18 @@ export default function LocationPicker({
         )}
 
         {pin && (
-          <span className="ms-auto text-gray-400 font-mono text-[10px]">
+          // dir="ltr" so the lat,lng pair isn't visually reversed by the RTL page.
+          <span dir="ltr" className="ms-auto text-gray-400 font-mono text-[10px]">
             {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
           </span>
         )}
       </div>
 
-      {!pin && (
-        <p className="text-xs text-gray-400">
-          לחץ/י על המפה או גרור/י את הסיכה כדי לסמן את מיקום האירוע.
-        </p>
-      )}
+      <p className="text-xs text-gray-400">
+        {pin
+          ? 'המיקום לא מדויק? גרור/י את הסיכה או לחץ/י על המפה לתיקון.'
+          : 'לחץ/י על המפה או גרור/י את הסיכה כדי לסמן את מיקום האירוע.'}
+      </p>
     </div>
   );
 }

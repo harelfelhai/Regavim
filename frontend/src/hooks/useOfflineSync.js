@@ -13,7 +13,7 @@ import {
  * becomes visible again. On iOS (no Background Sync API), the drain
  * runs in the foreground whenever the user opens the app.
  */
-export function useOfflineSync() {
+export function useOfflineSync({ onDrained } = {}) {
   const [queue,    setQueue]    = useState([]);
   const [syncing,  setSyncing]  = useState(false);
   const [isOnline, setIsOnline] = useState(
@@ -31,13 +31,16 @@ export function useOfflineSync() {
     draining.current = true;
     setSyncing(true);
     try {
-      await drainQueue();
+      const uploaded = await drainQueue();
+      // Newly-synced reports now exist on the server — tell the caller so it can
+      // refresh the report list/map (otherwise they don't appear until reload).
+      if (uploaded > 0) onDrained?.();
     } finally {
       await refresh();
       setSyncing(false);
       draining.current = false;
     }
-  }, [refresh]);
+  }, [refresh, onDrained]);
 
   useEffect(() => {
     // Items left in 'uploading' from a previous session that crashed mid-upload
