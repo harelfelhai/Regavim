@@ -206,6 +206,39 @@ describe('useReportForm — offline queuing (QUEUED step)', () => {
   });
 });
 
+describe('useReportForm — guest forceQueue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    enqueueReport.mockResolvedValue('queued-guest');
+    submitReport.mockResolvedValue({ id: 'r', status: 'confirmed' });
+  });
+
+  // The authStore mock above always returns a token, so this proves the guest
+  // capture page queues the report even when a stale token is present (QA2).
+  it('queues (never sends) when forceQueue is true, despite a token', async () => {
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    let res;
+    await act(async () => {
+      res = await result.current.handleSubmit({
+        description: 'x', finalCategory: 'OTHER', forceQueue: true,
+      });
+    });
+    expect(res).toBe('queued');
+    expect(result.current.step).toBe(STEP.QUEUED);
+    expect(enqueueReport).toHaveBeenCalledTimes(1);
+    expect(submitReport).not.toHaveBeenCalled();
+  });
+
+  it('sends normally when forceQueue is false and a token is present', async () => {
+    const { result } = renderHook(() => useReportForm());
+    act(() => { result.current.handleFileChange(mockFile); });
+    await act(() => result.current.handleSubmit({ description: 'x', finalCategory: 'OTHER' }));
+    expect(submitReport).toHaveBeenCalledTimes(1);
+    expect(enqueueReport).not.toHaveBeenCalled();
+  });
+});
+
 describe('useReportForm — reset', () => {
   beforeEach(() => vi.clearAllMocks());
 

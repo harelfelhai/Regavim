@@ -181,3 +181,23 @@ describe('useOfflineSync — derived state', () => {
     expect(result.current.pendingCount).toBe(0);
   });
 });
+
+// ── onDrained callback (refresh report list after sync — QA4) ──────────────────
+
+describe('useOfflineSync — onDrained callback', () => {
+  it('calls onDrained when items were uploaded', async () => {
+    drainQueue.mockResolvedValue(2); // 2 reports synced
+    const onDrained = vi.fn();
+    renderHook(() => useOfflineSync({ onDrained }));
+    await waitFor(() => expect(onDrained).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not call onDrained when nothing was uploaded', async () => {
+    drainQueue.mockResolvedValue(0);
+    const onDrained = vi.fn();
+    renderHook(() => useOfflineSync({ onDrained }));
+    await waitFor(() => expect(drainQueue).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onDrained).not.toHaveBeenCalled();
+  });
+});
